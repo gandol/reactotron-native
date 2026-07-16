@@ -43,7 +43,14 @@ final class ReactotronServerTests: XCTestCase {
     }
     let client = TestClient(port: port)
     try await client.send(#"{"type":"client.intro","payload":{"name":"TestApp","platform":"ios"}}"#)
-    let reply = try await client.receive()
+    var reply = try await client.receive()
+    // A newly-accepted connection also gets a `state.values.subscribe` broadcast
+    // (current subscriptions, possibly empty) as soon as it's accepted, matching
+    // reactotron-core-server.ts's unconditional stateValuesSendSubscriptions()
+    // call on every "connection" event — it can race ahead of setClientId.
+    if !reply.contains("setClientId") {
+      reply = try await client.receive()
+    }
     XCTAssertTrue(reply.contains("setClientId"))
     await fulfillment(of: [established], timeout: 5)
     client.close()
@@ -76,7 +83,12 @@ final class ReactotronServerTests: XCTestCase {
     try await Task.sleep(for: .seconds(1))  // old socket closed after the 500 ms defer
     do {
       try await c1.send(#"{"type":"log","payload":{}}"#)
-      _ = try await c1.receive()
+      // c1 has buffered `state.values.subscribe` broadcasts from its own
+      // accept and from c2's accept (see accept()'s sendSubscriptions() call)
+      // — drain those before the real closure surfaces as an error.
+      for _ in 0..<5 {
+        _ = try await c1.receive()
+      }
       XCTFail("old socket should be closed")
     } catch { /* expected */ }
     c2.close()
@@ -116,6 +128,37 @@ final class ReactotronServerTests: XCTestCase {
     try await client.send(#"{"type":"client.intro","payload":{"clientId":"cc"}}"#)
     try await client.send(#"{"type":"customCommand.register","payload":{"id":1,"command":"go_home","title":"Go Home"}}"#)
     await fulfillment(of: [registered], timeout: 5)
+    client.close()
+  }
+
+  func testNewConnectionReceivesCurrentSubscriptions() async throws {
+    await start()
+    let c1 = TestClient(port: port)
+    try await c1.send(#"{"type":"client.intro","payload":{"clientId":"sub-origin"}}"#)
+    try await c1.send(#"{"type":"state.values.change","payload":{"changes":[{"path":"foo"},{"path":"bar"}]}}"#)
+    try await Task.sleep(for: .milliseconds(300))  // let the server update subscriptions
+    let c2 = TestClient(port: port)
+    // The new connection is broadcast the current subscriptions immediately upon accept.
+    let msg = try await c2.receive()
+    XCTAssertTrue(msg.contains("state.values.subscribe"))
+    XCTAssertTrue(msg.contains("foo"))
+    XCTAssertTrue(msg.contains("bar"))
+    c1.close()
+    c2.close()
+  }
+
+  func testStateBackupResponseSetsNameToNull() async throws {
+    await start()
+    let got = expectation(description: "backup response command")
+    server.events.command = { cmd in
+      guard cmd.type == "state.backup.response" else { return }
+      XCTAssertEqual(cmd.payload["name"], .null)
+      got.fulfill()
+    }
+    let client = TestClient(port: port)
+    try await client.send(#"{"type":"client.intro","payload":{"clientId":"backup-test"}}"#)
+    try await client.send(#"{"type":"state.backup.response","payload":{"state":{"foo":"bar"}}}"#)
+    await fulfillment(of: [got], timeout: 5)
     client.close()
   }
 }

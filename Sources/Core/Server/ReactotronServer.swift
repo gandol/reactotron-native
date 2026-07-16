@@ -121,6 +121,12 @@ final class ReactotronServer: @unchecked Sendable {
 
     conn.start(queue: queue)
     receiveLoop(conn, id: id)
+
+    // Resend the current subscriptions to everyone upon connecting, matching
+    // reactotron-core-server.ts's unconditional `stateValuesSendSubscriptions()`
+    // call at the end of its "connection" handler (a plain broadcast, not
+    // targeted at just the new socket).
+    sendSubscriptions()
   }
 
   // MARK: - Close
@@ -235,6 +241,18 @@ final class ReactotronServer: @unchecked Sendable {
     if message.type == "customCommand.unregister", let clientId = command.clientId {
       let removeId = Int(payload["id"]?.numberValue ?? 0)
       customCommands[clientId]?.removeAll { $0.id == removeId }
+    }
+
+    // Assign a name to the backups since the client doesn't pass one. Without
+    // it, downstream consumers have to special-case a missing key instead of
+    // a standard assignment.
+    if message.type == "state.backup.response" {
+      if case .object(var obj) = command.payload {
+        obj["name"] = .null
+        command.payload = .object(obj)
+      } else {
+        command.payload = .object(["name": .null])
+      }
     }
 
     events.command(command)
