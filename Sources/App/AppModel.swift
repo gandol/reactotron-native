@@ -42,6 +42,7 @@ final class AppModel {
   let settings = SettingsStore()
   let session = SessionStore()
   let server = ReactotronServer()
+  let timeline = TimelineState()
 
   init() {
     session.commandHistoryLimit = settings.commandHistory

@@ -358,6 +358,9 @@ enum IconName: CaseIterable {
   case mdExpandLess
   case mdExpandMore
   case mdLabel
+  // Added in Task 11 for TimelineFilterModal's checkbox rows.
+  case mdCheckBox
+  case mdCheckBoxOutlineBlank
 
   static let data: [IconName: SVGIcon] = [
     .mdReorder: SVGIcon(
@@ -482,6 +485,16 @@ enum IconName: CaseIterable {
     .mdLabel: SVGIcon(
       width: 24, height: 24,
       path: "M17.63 5.84C17.27 5.33 16.67 5 16 5L5 5.01C3.9 5.01 3 5.9 3 7v10c0 1.1.9 1.99 2 1.99L16 19c.67 0 1.27-.33 1.63-.84L22 12l-4.37-6.16z"
+    ),
+    // Added in Task 11 — react-icons `md` family, used by TimelineFilterModal's
+    // Checkbox port. Extracted from unpkg react-icons@5.2.1/md/index.mjs.
+    .mdCheckBox: SVGIcon(
+      width: 24, height: 24,
+      path: "M19 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2zm-9 14-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"
+    ),
+    .mdCheckBoxOutlineBlank: SVGIcon(
+      width: 24, height: 24,
+      path: "M19 5v14H5V5h14m0-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z"
     ),
   ]
 }
