@@ -14,8 +14,30 @@ final class TreeViewModelTests: XCTestCase {
       "city": .string("Berlin"),
     ])
     let result = treePreview(obj)
-    // Keys are sorted alphabetically for deterministic output
+    // Keys are sorted alphabetically; 3 keys fits within the cap
     XCTAssertEqual(result, "{age: …, city: …, name: …}")
+  }
+
+  func testObjectPreview_cappedAt3Keys_withEllipsis() {
+    let obj: JSONValue = .object([
+      "a": .number(1),
+      "b": .number(2),
+      "c": .number(3),
+      "d": .number(4),
+      "e": .number(5),
+    ])
+    let result = treePreview(obj)
+    XCTAssertEqual(result, "{a: …, b: …, c: …, …}")
+  }
+
+  func testObjectPreview_exactly3Keys_noTrailingEllipsis() {
+    let obj: JSONValue = .object([
+      "x": .null,
+      "y": .null,
+      "z": .null,
+    ])
+    let result = treePreview(obj)
+    XCTAssertEqual(result, "{x: …, y: …, z: …}")
   }
 
   func testObjectPreview_singleKey() {

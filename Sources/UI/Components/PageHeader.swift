@@ -9,14 +9,18 @@ typealias HeaderTab = (text: String, icon: IconName, isActive: Bool, onTap: () -
 // MARK: - PageHeader
 
 /// Page header bar with two layout variants:
-/// - **Title + actions**: a title string on the left, icon buttons on the right.
+/// - **Title + actions**: a title string centered in the header (matching React
+///   Header's MiddleContainer), icon buttons right-aligned.
 /// - **Tabs + actions**: a row of selectable tabs (icon + label) on the left,
 ///   icon buttons on the right.
 ///
 /// Port of `reactotron-core-ui`'s `Header` + `HeaderTabButton`.
+/// The React Header uses a 3-column flex layout (LeftContainer/MiddleContainer/
+/// RightContainer) where the middle column is centered via `justify-content:
+/// center`. This is replicated with a ZStack overlay so the title floats
+/// centered independently of left/right content widths, while tabs and actions
+/// remain left/right respectively.
 struct PageHeader: View {
-
-  // MARK: Title variant
 
   let title: String?
   let tabs: [HeaderTab]?
@@ -38,37 +42,44 @@ struct PageHeader: View {
   }
 
   var body: some View {
-    HStack(spacing: 0) {
+    ZStack(alignment: .center) {
+      // Background row: tabs on the left, actions on the right
+      HStack(spacing: 0) {
+        if let tabs, !tabs.isEmpty {
+          HStack(spacing: 0) {
+            ForEach(Array(tabs.enumerated()), id: \.offset) { _, tab in
+              tabButton(tab)
+            }
+          }
+          .padding(.leading, 10)
+        } else {
+          Spacer() // balance the actions side when no tabs
+        }
+
+        Spacer(minLength: 0)
+
+        HStack(spacing: 8) {
+          ForEach(Array(actions.enumerated()), id: \.offset) { _, action in
+            Button {
+              action.onTap()
+            } label: {
+              Icon(action.icon, size: 18, color: Theme.foregroundLight)
+                .help(action.tip)
+            }
+            .buttonStyle(.plain)
+          }
+        }
+        .padding(.trailing, 20)
+      }
+      .frame(height: 70)
+
+      // Centered title overlay — does not intercept clicks (allowsHitTesting false)
       if let title {
         Text(title)
           .font(Theme.font())
           .foregroundStyle(Theme.foregroundLight)
-          .padding(.horizontal, 20)
+          .allowsHitTesting(false)
       }
-
-      if let tabs, !tabs.isEmpty {
-        HStack(spacing: 0) {
-          ForEach(Array(tabs.enumerated()), id: \.offset) { _, tab in
-            tabButton(tab)
-          }
-        }
-        .padding(.horizontal, 10)
-      }
-
-      Spacer(minLength: 0)
-
-      HStack(spacing: 8) {
-        ForEach(Array(actions.enumerated()), id: \.offset) { _, action in
-          Button {
-            action.onTap()
-          } label: {
-            Icon(action.icon, size: 18, color: Theme.foregroundLight)
-              .help(action.tip)
-          }
-          .buttonStyle(.plain)
-        }
-      }
-      .padding(.trailing, 20)
     }
     .frame(height: 70)
     .background(Theme.backgroundSubtleLight)
