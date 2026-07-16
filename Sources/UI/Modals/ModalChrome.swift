@@ -83,3 +83,31 @@ struct ModalChrome<Content: View, AdditionalKeystrokes: View>: View {
     .onTapGesture {}  // swallow taps so they don't fall through to the overlay's close handler
   }
 }
+
+/// Port of `reactotron-core-ui`'s `components/Modal`-exported `KeystrokeContainer` —
+/// a horizontal row for one or more `Keystroke` chips, passed into
+/// `ModalChrome`'s `additionalKeystrokes` slot (e.g. "ENTER Subscribe").
+struct KeystrokeContainer<Content: View>: View {
+  @ViewBuilder let content: () -> Content
+
+  var body: some View {
+    HStack(spacing: 8) { content() }
+  }
+}
+
+/// Port of `components/Modal`'s exported `Keystroke` — a single key-chip label,
+/// styled identically to `ModalChrome`'s own "ESC" chip.
+struct Keystroke: View {
+  let text: String
+
+  init(_ text: String) { self.text = text }
+
+  var body: some View {
+    Text(text)
+      .font(Theme.font(13))
+      .foregroundStyle(Theme.foreground)
+      .padding(.horizontal, 8)
+      .padding(.vertical, 4)
+      .background(RoundedRectangle(cornerRadius: 4).fill(Theme.backgroundHighlight))
+  }
+}

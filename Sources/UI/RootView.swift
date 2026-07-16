@@ -29,8 +29,8 @@ struct RootView: View {
     switch model.currentPage {
     case .home: HomePage()
     case .timeline: TimelinePage()
-    case .stateSubscriptions: Text("State Subscriptions")  // Task 10
-    case .stateSnapshots: Text("State Snapshots")  // Task 12
+    case .stateSubscriptions: SubscriptionsPage()
+    case .stateSnapshots: SnapshotsPage()
     case .nativeOverlay: Text("React Native Overlay")  // Task 13
     case .nativeStorybook: Text("React Native Storybook")  // Task 13
     case .customCommands: Text("Custom Commands")  // Task 11
@@ -51,8 +51,30 @@ struct RootView: View {
         .background(Theme.background)
     case .timelineFilter:
       TimelineFilterModal(onClose: { model.activeModal = nil })
-    case .dispatchAction, .snapshotRename, .subscriptionAdd:
-      EmptyView()
+    case .dispatchAction:
+      DispatchActionModal(
+        onClose: { model.activeModal = nil },
+        onDispatch: { action in
+          model.sendCommand(type: "state.action.dispatch", payload: .object(["action": action]))
+        }
+      )
+    case .subscriptionAdd:
+      SubscriptionAddModal(
+        onClose: { model.activeModal = nil },
+        onSubscribe: { path in
+          model.server.stateValuesSubscribe(path: path)
+          model.activeModal = nil
+        }
+      )
+    case .snapshotRename(let snapshot):
+      SnapshotRenameModal(
+        snapshot: snapshot,
+        onClose: { model.activeModal = nil },
+        onRename: { name in
+          model.stateUI.renameSnapshot(snapshot, to: name)
+          model.activeModal = nil
+        }
+      )
     }
   }
 }
