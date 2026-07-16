@@ -2,6 +2,9 @@ import SwiftUI
 
 /// Pure helper that produces the collapsed-node preview string for a `JSONValue`.
 /// Used by `TreeView` for collapsed rows and exposed for unit testing.
+///
+/// Object previews are capped at the first 3 sorted keys, with `, …` appended
+/// when more keys exist (e.g. `{a: …, b: …, c: …, …}`).
 func treePreview(_ value: JSONValue) -> String {
   switch value {
   case .null:
@@ -19,27 +22,45 @@ func treePreview(_ value: JSONValue) -> String {
     return items.count == 1 ? "1 item" : "\(items.count) items"
   case .object(let dict):
     guard !dict.isEmpty else { return "{}" }
-    let parts = dict.keys.sorted().map { "\($0): …" }
-    return "{\(parts.joined(separator: ", "))}"
+    let sorted = dict.keys.sorted()
+    let capped = sorted.prefix(3).map { "\($0): …" }
+    let suffix = sorted.count > 3 ? ", …" : ""
+    return "{\(capped.joined(separator: ", "))\(suffix)}"
   }
 }
 
-// MARK: - TreeView
+// MARK: - TreeView (public root, owns expansion state)
 
-/// Recursive disclosure tree for arbitrary JSON.  Expansion state is keyed by
-/// the JSON path (dot-separated for objects, bracket-indexed for arrays).
+/// Recursive disclosure tree for arbitrary JSON.  Expansion state is owned
+/// at the root and shared with all descendant nodes via `@Binding`.
 struct TreeView: View {
   let value: JSONValue
   let level: Int
-  let path: String
 
   @State private var expanded: Set<String> = []
 
-  init(value: JSONValue, level: Int = 0, path: String = "root") {
+  init(value: JSONValue, level: Int = 0) {
     self.value = value
     self.level = level
-    self.path = path
   }
+
+  var body: some View {
+    _TreeNode(
+      value: value,
+      level: level,
+      path: "root",
+      expanded: $expanded
+    )
+  }
+}
+
+// MARK: - _TreeNode (private recursive node)
+
+private struct _TreeNode: View {
+  let value: JSONValue
+  let level: Int
+  let path: String
+  @Binding var expanded: Set<String>
 
   private var isExpandable: Bool {
     switch value {
@@ -147,7 +168,12 @@ struct TreeView: View {
             Text(":")
               .font(Theme.font())
               .foregroundStyle(Theme.foregroundDark)
-            TreeView(value: child, level: level + 1, path: "\(path).\(key)")
+            _TreeNode(
+              value: child,
+              level: level + 1,
+              path: "\(path).\(key)",
+              expanded: $expanded
+            )
           }
           .padding(.leading, CGFloat(level) * 15)
         }
@@ -162,7 +188,12 @@ struct TreeView: View {
           Text(":")
             .font(Theme.font())
             .foregroundStyle(Theme.foregroundDark)
-          TreeView(value: child, level: level + 1, path: "\(path)[\(index)]")
+          _TreeNode(
+            value: child,
+            level: level + 1,
+            path: "\(path)[\(index)]",
+            expanded: $expanded
+          )
         }
         .padding(.leading, CGFloat(level) * 15)
       }
