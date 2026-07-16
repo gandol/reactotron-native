@@ -361,6 +361,17 @@ enum IconName: CaseIterable {
   // Added in Task 11 for TimelineFilterModal's checkbox rows.
   case mdCheckBox
   case mdCheckBoxOutlineBlank
+  // Added in Task 12 for the State pages (Subscriptions/Snapshots tabs,
+  // header actions, and per-row actions). Extracted from
+  // unpkg react-icons@5.2.1/md/index.mjs.
+  case mdNotificationsNone
+  case mdImportExport
+  case mdAdd
+  case mdDelete
+  case mdCreate
+  case mdFileUpload
+  case mdCallReceived
+  case mdFileDownload
 
   static let data: [IconName: SVGIcon] = [
     .mdReorder: SVGIcon(
@@ -495,6 +506,40 @@ enum IconName: CaseIterable {
     .mdCheckBoxOutlineBlank: SVGIcon(
       width: 24, height: 24,
       path: "M19 5v14H5V5h14m0-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z"
+    ),
+    // Added in Task 12 — react-icons `md` family, used by SubscriptionsPage/
+    // SnapshotsPage. Extracted from unpkg react-icons@5.2.1/md/index.mjs.
+    .mdNotificationsNone: SVGIcon(
+      width: 24, height: 24,
+      path: "M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.63-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.64 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2zm-2 1H8v-6c0-2.48 1.51-4.5 4-4.5s4 2.02 4 4.5v6z"
+    ),
+    .mdImportExport: SVGIcon(
+      width: 24, height: 24,
+      path: "M9 3 5 6.99h3V14h2V6.99h3L9 3zm7 14.01V10h-2v7.01h-3L15 21l4-3.99h-3z"
+    ),
+    .mdAdd: SVGIcon(
+      width: 24, height: 24,
+      path: "M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"
+    ),
+    .mdDelete: SVGIcon(
+      width: 24, height: 24,
+      path: "M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"
+    ),
+    .mdCreate: SVGIcon(
+      width: 24, height: 24,
+      path: "M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a.996.996 0 0 0 0-1.41l-2.34-2.34a.996.996 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"
+    ),
+    .mdFileUpload: SVGIcon(
+      width: 24, height: 24,
+      path: "M9 16h6v-6h4l-7-7-7 7h4zm-4 2h14v2H5z"
+    ),
+    .mdCallReceived: SVGIcon(
+      width: 24, height: 24,
+      path: "M20 5.41 18.59 4 7 15.59V9H5v10h10v-2H8.41z"
+    ),
+    .mdFileDownload: SVGIcon(
+      width: 24, height: 24,
+      path: "M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"
     ),
   ]
 }

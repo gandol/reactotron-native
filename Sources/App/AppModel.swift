@@ -7,15 +7,12 @@ enum Page: String, CaseIterable {
   case customCommands, help
 }
 
-/// Modal presented over `RootView` via `.sheet(item:)`. Cases beyond
-/// `.mcpSettings` are placeholders wired up by later tasks (8–15).
-///
-/// - Note: `snapshotRename` carries no payload yet — `SnapshotItem` arrives in
-///   Task 12, which extends this case with an associated value.
+/// Modal presented over `RootView` via `.sheet(item:)`. `.mcpSettings` is a
+/// placeholder wired up by a later task (15).
 enum Modal: Identifiable {
   case dispatchAction
   case timelineFilter
-  case snapshotRename
+  case snapshotRename(SnapshotItem)
   case subscriptionAdd
   case mcpSettings
 
@@ -23,7 +20,7 @@ enum Modal: Identifiable {
     switch self {
     case .dispatchAction: "dispatchAction"
     case .timelineFilter: "timelineFilter"
-    case .snapshotRename: "snapshotRename"
+    case .snapshotRename(let item): "snapshotRename-\(item.id)"
     case .subscriptionAdd: "subscriptionAdd"
     case .mcpSettings: "mcpSettings"
     }
@@ -43,6 +40,7 @@ final class AppModel {
   let session = SessionStore()
   let server = ReactotronServer()
   let timeline = TimelineState()
+  let stateUI = StateUIStore()
 
   init() {
     session.commandHistoryLimit = settings.commandHistory
@@ -60,7 +58,10 @@ final class AppModel {
       Task { @MainActor in self?.session.connectionDisconnected(conn) }
     }
     server.events.command = { [weak self] cmd in
-      Task { @MainActor in self?.session.commandReceived(cmd) }
+      Task { @MainActor in
+        self?.session.commandReceived(cmd)
+        self?.stateUI.handle(command: cmd)
+      }
     }
   }
 
