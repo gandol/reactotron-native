@@ -25,8 +25,6 @@ struct Footer: View {
       .padding(.horizontal, 10)
       .frame(height: isOpen ? 85 : 25)
       .background(Theme.subtleLine)
-      .contentShape(Rectangle())
-      .onTapGesture { if !isOpen { isOpen = true } }
     }
     .overlay(alignment: .top) {
       Rectangle().fill(Theme.chromeLine).frame(height: 1)
@@ -37,6 +35,14 @@ struct Footer: View {
 
   // MARK: - Left side
 
+  /// Tap-to-expand is scoped to this non-interactive area only — a port of
+  /// the TSX `ContentContainer`'s `onClick={() => !isOpen && setIsOpen(true)}`,
+  /// where the MCP/expand buttons call `e.stopPropagation()` to opt out.
+  /// SwiftUI has no propagation-stopping equivalent that composes safely with
+  /// `Button`, so instead of a container-wide `.onTapGesture` (which sat as an
+  /// ancestor of `expandButton` and could re-open the footer on the same tap
+  /// that just closed it), the gesture lives only on this sibling view —
+  /// disjoint from the buttons, so there's no ancestor/descendant conflict.
   @ViewBuilder private var leftContent: some View {
     if isOpen {
       ScrollView(.horizontal, showsIndicators: false) {
@@ -59,6 +65,9 @@ struct Footer: View {
       }
       .font(Theme.font(11))
       .foregroundStyle(Theme.foregroundLight)
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .contentShape(Rectangle())
+      .onTapGesture { isOpen = true }
     }
   }
 

@@ -1,17 +1,6 @@
 import SwiftUI
 import AppKit
 
-/// Loose bundled resource (Copy Bundle Resources, not an asset catalog) —
-/// loaded directly from the main bundle rather than `Image(_:)`/`NSImage(named:)`,
-/// which target asset-catalog entries.
-private let reactotronLogoImage: NSImage = {
-  if let url = Bundle.main.url(forResource: "Reactotron-128", withExtension: "png"),
-    let image = NSImage(contentsOf: url) {
-    return image
-  }
-  return NSImage()
-}()
-
 /// Port of `SideBar/Sidebar.tsx` + `SideBarButton/Stateless.tsx`.
 struct SideBar: View {
   @Environment(AppModel.self) private var model
@@ -97,6 +86,20 @@ private struct SideBarButton: View {
 
   @State private var hovering = false
 
+  /// Loose bundled resource (Copy Bundle Resources, not an asset catalog) —
+  /// loaded directly from the main bundle rather than `Image(_:)`/`NSImage(named:)`,
+  /// which target asset-catalog entries. `static let` on this `View` (rather
+  /// than a module-scope global) keeps the non-Sendable `NSImage` under
+  /// `SideBarButton`'s implicit `@MainActor` isolation instead of living as an
+  /// unisolated global.
+  private static let reactotronLogoImage: NSImage = {
+    if let url = Bundle.main.url(forResource: "Reactotron-128", withExtension: "png"),
+      let image = NSImage(contentsOf: url) {
+      return image
+    }
+    return NSImage()
+  }()
+
   private var animatedColor: Color { isActive ? Theme.foregroundLight : Theme.highlight }
 
   var body: some View {
@@ -107,7 +110,7 @@ private struct SideBarButton: View {
             .padding(.bottom, 4)
         }
         if image {
-          Image(nsImage: reactotronLogoImage)
+          Image(nsImage: Self.reactotronLogoImage)
             .resizable()
             .frame(width: 32, height: 32)
             .saturation(isActive ? 1 : 0)
