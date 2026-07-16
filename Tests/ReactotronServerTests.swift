@@ -16,6 +16,16 @@ final class TestClient {
   func close() { task.cancel(with: .normalClosure, reason: nil) }
 }
 
+/// Mutable box for pulling a value out of an `@Sendable` event closure into
+/// the test body. The closures below are only ever written before, and read
+/// after, their paired `fulfillment(of:)` await, so this is safe in practice;
+/// `@unchecked Sendable` is needed only because the compiler can't see that
+/// happens-before relationship through an XCTestExpectation.
+private final class Box<T>: @unchecked Sendable {
+  var value: T
+  init(_ value: T) { self.value = value }
+}
+
 final class ReactotronServerTests: XCTestCase {
   var server: ReactotronServer!
   var port: UInt16!
@@ -27,9 +37,13 @@ final class ReactotronServerTests: XCTestCase {
   override func tearDown() { server.stop() }
 
   func start() async {
+    await start(on: port)
+  }
+
+  func start(on testPort: UInt16) async {
     await withCheckedContinuation { cont in
       server.events.started = { cont.resume() }
-      server.start(port: port)
+      server.start(port: testPort)
     }
   }
 
@@ -160,5 +174,44 @@ final class ReactotronServerTests: XCTestCase {
     try await client.send(#"{"type":"state.backup.response","payload":{"state":{"foo":"bar"}}}"#)
     await fulfillment(of: [got], timeout: 5)
     client.close()
+  }
+
+  func testConnectionIdsNotReusedAcrossRestart() async throws {
+    await start()
+
+    let firstId = Box<Int?>(nil)
+    let firstConnected = expectation(description: "first connect")
+    server.events.connect = { partial in
+      firstId.value = partial.id
+      firstConnected.fulfill()
+    }
+    let c1 = TestClient(port: port)
+    await fulfillment(of: [firstConnected], timeout: 5)
+    c1.close()
+
+    server.stop()
+    // Restart on a fresh port rather than the same one: rebinding the exact
+    // same port immediately after stop() races the OS's own socket teardown
+    // (even with allowLocalEndpointReuse) and can hang the listener in
+    // `.waiting` indefinitely — that's a kernel-timing flake unrelated to
+    // what this test is verifying (that connectionId survives stop()). A
+    // distinct port sidesteps that race entirely.
+    var restartPort = UInt16.random(in: 20_000...40_000)
+    while restartPort == port { restartPort = UInt16.random(in: 20_000...40_000) }
+    await start(on: restartPort)
+
+    let secondId = Box<Int?>(nil)
+    let secondConnected = expectation(description: "second connect")
+    server.events.connect = { partial in
+      secondId.value = partial.id
+      secondConnected.fulfill()
+    }
+    let c2 = TestClient(port: restartPort)
+    await fulfillment(of: [secondConnected], timeout: 5)
+    c2.close()
+
+    let unwrappedFirst = try XCTUnwrap(firstId.value)
+    let unwrappedSecond = try XCTUnwrap(secondId.value)
+    XCTAssertGreaterThan(unwrappedSecond, unwrappedFirst)
   }
 }

@@ -41,7 +41,15 @@ final class ReactotronServer: @unchecked Sendable {
   private var connections: [Int: Connection] = [:]
   private var customCommands: [String: [CustomCommand]] = [:]
 
-  private(set) var subscriptions: [String] = []
+  private var _subscriptions: [String] = []
+
+  /// Current `state.values` subscriptions. Mutated only on `queue`; this
+  /// getter hops onto `queue` synchronously so off-queue callers never race
+  /// the mutating side on the backing (COW) Array. Internal, already-on-queue
+  /// code must read/write `_subscriptions` directly — going through this
+  /// computed property from `queue` itself would deadlock (`queue.sync` from
+  /// within `queue`).
+  var subscriptions: [String] { queue.sync { _subscriptions } }
 
   // MARK: - Lifecycle
 
@@ -85,9 +93,11 @@ final class ReactotronServer: @unchecked Sendable {
       clientIds.removeAll()
       connections.removeAll()
       customCommands.removeAll()
-      subscriptions.removeAll()
-      connectionId = 0
-      messageId = 0
+      _subscriptions.removeAll()
+      // connectionId/messageId are intentionally NOT reset here (matches
+      // reactotron-core-server.ts, which never resets them either): a late
+      // `.cancelled` callback from a pre-stop socket must not evict a
+      // post-restart connection that happens to reuse a reset id.
       events.stopped()
     }
   }
@@ -219,7 +229,7 @@ final class ReactotronServer: @unchecked Sendable {
 
     if message.type == "state.values.change" {
       let changes = payload["changes"]?.arrayValue ?? []
-      subscriptions = changes.compactMap { $0["path"]?.stringValue }
+      _subscriptions = changes.compactMap { $0["path"]?.stringValue }
     }
 
     if message.type == "customCommand.register", let clientId = command.clientId {
@@ -285,29 +295,32 @@ final class ReactotronServer: @unchecked Sendable {
 
   func stateValuesSubscribe(path: String) {
     queue.async { [self] in
-      guard !subscriptions.contains(path) else { return }
-      subscriptions.append(path == "*" ? "" : path)
+      guard !_subscriptions.contains(path) else { return }
+      _subscriptions.append(path == "*" ? "" : path)
       sendSubscriptions()
     }
   }
 
   func stateValuesUnsubscribe(path: String) {
     queue.async { [self] in
-      guard subscriptions.contains(path) else { return }
-      subscriptions.removeAll { $0 == path }
+      guard _subscriptions.contains(path) else { return }
+      _subscriptions.removeAll { $0 == path }
       sendSubscriptions()
     }
   }
 
   func stateValuesClearSubscriptions() {
     queue.async { [self] in
-      subscriptions.removeAll()
+      _subscriptions.removeAll()
       sendSubscriptions()
     }
   }
 
+  /// Must only be called from `queue` (directly, or via the `queue.async`
+  /// blocks above) — reads `_subscriptions` directly, not the `queue.sync`-
+  /// backed public getter, to avoid a queue.sync-from-queue deadlock.
   private func sendSubscriptions() {
-    let paths = subscriptions.map { JSONValue.string($0) }
+    let paths = _subscriptions.map { JSONValue.string($0) }
     send(type: "state.values.subscribe", payload: .object(["paths": .array(paths)]))
   }
 
