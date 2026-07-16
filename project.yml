@@ -13,7 +13,12 @@ targets:
   Reactotron:
     type: application
     platform: macOS
-    sources: [Sources]
+    sources:
+      - path: Sources
+        excludes:
+          - "Resources/**"
+      - path: Sources/Resources
+        buildPhase: resources
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.reactotron.native
