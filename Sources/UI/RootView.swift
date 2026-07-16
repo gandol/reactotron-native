@@ -28,7 +28,7 @@ struct RootView: View {
   @ViewBuilder private var pageView: some View {
     switch model.currentPage {
     case .home: HomePage()
-    case .timeline: Text("Timeline")  // Task 9
+    case .timeline: TimelinePage()
     case .stateSubscriptions: Text("State Subscriptions")  // Task 10
     case .stateSnapshots: Text("State Snapshots")  // Task 12
     case .nativeOverlay: Text("React Native Overlay")  // Task 13
@@ -49,7 +49,9 @@ struct RootView: View {
         .padding()
         .frame(minWidth: 320, minHeight: 200)
         .background(Theme.background)
-    case .dispatchAction, .timelineFilter, .snapshotRename, .subscriptionAdd:
+    case .timelineFilter:
+      TimelineFilterModal(onClose: { model.activeModal = nil })
+    case .dispatchAction, .snapshotRename, .subscriptionAdd:
       EmptyView()
     }
   }
