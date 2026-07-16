@@ -6,9 +6,8 @@ struct ReactotronApp: App {
 
   var body: some Scene {
     WindowGroup {
-      Text("Reactotron")
+      RootView()
         .frame(minWidth: 900, minHeight: 600)
-        .background(Theme.background)
         .environment(model)
     }
   }
