@@ -107,11 +107,14 @@ private struct WelcomeView: View {
 // MARK: - Connection list (has connections)
 
 /// Port of `index.tsx`'s `ConnectionCell`. Fields shown, in order: platform icon,
-/// connection name, `"{platformName} {platformDetails}"`, and (when available)
-/// screen size — matching the source exactly. There is no `onClick` on
-/// `ConnectionContainer` in the source, no address field, and no selected-state
-/// styling: this list is purely informational (selection/click-to-navigate lives
-/// in the footer's connection selector, ported in Task 7).
+/// connection name, `"{platformName} {platformDetails}"`, and screen size. The
+/// screen column (divider + text) always renders, even when the screen string is
+/// empty — matching `<Screen>{screen}</Screen>`, which is unconditional in the
+/// source (only the *text content* is conditionally non-empty, not the element).
+/// There is no `onClick` on `ConnectionContainer` in the source, no address field,
+/// and no selected-state styling: this list is purely informational
+/// (selection/click-to-navigate lives in the footer's connection selector, ported
+/// in Task 7).
 private struct ConnectionCell: View {
   let connection: Connection
 
@@ -135,16 +138,13 @@ private struct ConnectionCell: View {
         }
         .padding(.leading, 10)
 
-        let screen = screenSize(for: connection)
-        if !screen.isEmpty {
-          HStack(spacing: 10) {
-            Rectangle().fill(Theme.subtleLine).frame(width: 1)
-            Text(screen)
-              .font(Theme.font())
-              .foregroundStyle(Theme.backgroundHighlight)
-          }
-          .padding(.leading, 10)
+        HStack(spacing: 10) {
+          Rectangle().fill(Theme.subtleLine).frame(width: 1)
+          Text(screenSize(for: connection))
+            .font(Theme.font())
+            .foregroundStyle(Theme.backgroundHighlight)
         }
+        .padding(.leading, 10)
 
         Spacer(minLength: 0)
       }
