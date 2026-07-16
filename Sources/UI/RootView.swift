@@ -27,7 +27,7 @@ struct RootView: View {
   /// case here is a placeholder until its task ports the corresponding view.
   @ViewBuilder private var pageView: some View {
     switch model.currentPage {
-    case .home: Text("Home")  // Task 8
+    case .home: HomePage()
     case .timeline: Text("Timeline")  // Task 9
     case .stateSubscriptions: Text("State Subscriptions")  // Task 10
     case .stateSnapshots: Text("State Snapshots")  // Task 12
