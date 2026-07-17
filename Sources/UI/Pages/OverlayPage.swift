@@ -322,6 +322,13 @@ struct OverlayPage: View {
   private func applyOverlay() {
     scale = 1
     updateOverlayParams([
+      // Source sends `uri: URI` — if the local `URI` state were ever
+      // undefined here, JS would send the key as `undefined`, which
+      // `JSON.stringify` drops entirely (key omitted, not `null`). `.null`
+      // is the closest Swift stand-in but is NOT wire-identical: it sends
+      // an explicit `"uri": null` instead of omitting the key. In practice
+      // this branch is unreachable — the Reapply button only renders when
+      // `uri` (and therefore `localURI`) is already set.
       "uri": localURI.map { .string($0) } ?? .null,
       "width": .number(Double(originalWidth)),
       "height": .number(Double(originalHeight)),
@@ -409,7 +416,11 @@ struct OverlayPage: View {
   // MARK: - Drop handling
 
   private func handleDrop(_ providers: [NSItemProvider]) -> Bool {
-    guard let provider = providers.first, provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) else {
+    // Port of `handleDrop`'s `if (event.dataTransfer.files.length !== 1) return`
+    // — ignore drops that aren't exactly one file.
+    guard providers.count == 1, let provider = providers.first,
+      provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier)
+    else {
       return false
     }
     provider.loadDataRepresentation(for: .fileURL) { data, _ in
