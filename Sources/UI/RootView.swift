@@ -31,9 +31,9 @@ struct RootView: View {
     case .timeline: TimelinePage()
     case .stateSubscriptions: SubscriptionsPage()
     case .stateSnapshots: SnapshotsPage()
-    case .nativeOverlay: Text("React Native Overlay")  // Task 13
-    case .nativeStorybook: Text("React Native Storybook")  // Task 13
-    case .customCommands: Text("Custom Commands")  // Task 11
+    case .nativeOverlay: OverlayPage()
+    case .nativeStorybook: StorybookPage()
+    case .customCommands: CustomCommandsPage()
     case .help: Text("Help")  // Task 14
     }
   }

@@ -372,6 +372,13 @@ enum IconName: CaseIterable {
   case mdFileUpload
   case mdCallReceived
   case mdFileDownload
+  // Added in Task 13 — react-icons `md` family, used by the React Native tab
+  // header (Overlay | Storybook) and Storybook's on/off radio toggle.
+  // Extracted from unpkg react-icons@5.2.1/md/index.mjs.
+  case mdCamera
+  case mdBook
+  case mdRadioButtonChecked
+  case mdRadioButtonUnchecked
 
   static let data: [IconName: SVGIcon] = [
     .mdReorder: SVGIcon(
@@ -540,6 +547,23 @@ enum IconName: CaseIterable {
     .mdFileDownload: SVGIcon(
       width: 24, height: 24,
       path: "M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"
+    ),
+    // Added in Task 13 — react-icons `md` family, used by OverlayPage/StorybookPage.
+    .mdCamera: SVGIcon(
+      width: 24, height: 24,
+      path: "m9.4 10.5 4.77-8.26a9.984 9.984 0 0 0-8.49 2.01l3.66 6.35.06-.1zM21.54 9c-.92-2.92-3.15-5.26-6-6.34L11.88 9h9.66zm.26 1h-7.49l.29.5 4.76 8.25A9.91 9.91 0 0 0 22 12c0-.69-.07-1.35-.2-2zM8.54 12l-3.9-6.75A9.958 9.958 0 0 0 2.2 14h7.49l-1.15-2zm-6.08 3c.92 2.92 3.15 5.26 6 6.34L12.12 15H2.46zm11.27 0-3.9 6.76a9.984 9.984 0 0 0 8.49-2.01l-3.66-6.35-.93 1.6z"
+    ),
+    .mdBook: SVGIcon(
+      width: 24, height: 24,
+      path: "M18 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zM6 4h5v8l-2.5-1.5L6 12V4z"
+    ),
+    .mdRadioButtonChecked: SVGIcon(
+      width: 24, height: 24,
+      path: "M12 7c-2.76 0-5 2.24-5 5s2.24 5 5 5 5-2.24 5-5-2.24-5-5-5zm0-5C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8z"
+    ),
+    .mdRadioButtonUnchecked: SVGIcon(
+      width: 24, height: 24,
+      path: "M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8z"
     ),
   ]
 }

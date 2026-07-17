@@ -7,9 +7,27 @@ final class SessionStoreTests: XCTestCase {
     Connection(id: id, clientId: clientId, address: "127.0.0.1",
                intro: .object(["platform": .string("ios")]))
   }
-  func cmd(_ type: String, clientId: String?, connectionId: Int = 1, msgId: Int = .random(in: 1...99999)) -> Command {
+  func cmd(
+    _ type: String, clientId: String?, connectionId: Int = 1,
+    msgId: Int = .random(in: 1...99999), payload: JSONValue = .object([:])
+  ) -> Command {
     Command(type: type, connectionId: connectionId, messageId: msgId, date: Date(),
-            deltaTime: 0, important: false, payload: .object([:]), clientId: clientId, diff: nil)
+            deltaTime: 0, important: false, payload: payload, clientId: clientId, diff: nil)
+  }
+
+  /// Builds a `customCommand.register` payload matching
+  /// `reactotron-core-contract`'s `CustomCommandRegisterPayload`.
+  func registerPayload(
+    id: Int, command: String, title: String? = nil, description: String? = nil,
+    args: [(name: String, type: String)] = []
+  ) -> JSONValue {
+    var obj: [String: JSONValue] = ["id": .number(Double(id)), "command": .string(command)]
+    if let title { obj["title"] = .string(title) }
+    if let description { obj["description"] = .string(description) }
+    if !args.isEmpty {
+      obj["args"] = .array(args.map { .object(["name": .string($0.name), "type": .string($0.type)]) })
+    }
+    return .object(obj)
   }
 
   func testAutoSelectsSingleConnection() {
@@ -69,5 +87,78 @@ final class SessionStoreTests: XCTestCase {
     s.selectConnection("b")
     s.connectionDisconnected(conn("b", id: 2))
     XCTAssertEqual(s.selectedClientId, "a")
+  }
+
+  // MARK: - Custom command registry
+
+  func testCustomCommandRegisterAppendsToSelectedConnection() {
+    let s = SessionStore()
+    s.connectionEstablished(conn("a"))
+    let payload = registerPayload(
+      id: 1, command: "doThing", title: "Do Thing", description: "does a thing",
+      args: [(name: "arg1", type: "string")]
+    )
+    s.commandReceived(cmd("customCommand.register", clientId: "a", payload: payload))
+
+    let ccs = s.selectedConnection?.customCommands
+    XCTAssertEqual(ccs?.count, 1)
+    XCTAssertEqual(ccs?.first?.id, 1)
+    XCTAssertEqual(ccs?.first?.command, "doThing")
+    XCTAssertEqual(ccs?.first?.title, "Do Thing")
+    XCTAssertEqual(ccs?.first?.description, "does a thing")
+    XCTAssertEqual(ccs?.first?.args, [CustomCommandArg(name: "arg1", type: "string")])
+
+    // Existing prepend/trim logic is untouched — the register command also
+    // lands in the ordinary command timeline.
+    XCTAssertEqual(s.selectedConnection?.commands.count, 1)
+    XCTAssertEqual(s.selectedConnection?.commands.first?.type, "customCommand.register")
+  }
+
+  func testCustomCommandUnregisterRemovesById() {
+    let s = SessionStore()
+    s.connectionEstablished(conn("a"))
+    s.commandReceived(cmd("customCommand.register", clientId: "a", payload: registerPayload(id: 1, command: "a")))
+    s.commandReceived(cmd("customCommand.register", clientId: "a", payload: registerPayload(id: 2, command: "b")))
+    XCTAssertEqual(s.selectedConnection?.customCommands.count, 2)
+
+    s.commandReceived(cmd(
+      "customCommand.unregister", clientId: "a",
+      payload: .object(["id": .number(1), "command": .string("a")])
+    ))
+    XCTAssertEqual(s.selectedConnection?.customCommands.map(\.id), [2])
+  }
+
+  /// `reactotron-core-server.ts`'s `customCommand.register` handler does an
+  /// unconditional `list.push(...)` — no id-based dedup — so re-registering
+  /// the same id produces two entries. Source governs over the shorthand
+  /// "dedupe by id" phrasing in the task brief.
+  func testDuplicateCustomCommandRegisterAppendsPerSource() {
+    let s = SessionStore()
+    s.connectionEstablished(conn("a"))
+    let payload = registerPayload(id: 1, command: "dup")
+    s.commandReceived(cmd("customCommand.register", clientId: "a", payload: payload))
+    s.commandReceived(cmd("customCommand.register", clientId: "a", payload: payload))
+    XCTAssertEqual(s.selectedConnection?.customCommands.count, 2)
+  }
+
+  /// Mirrors the server's `socket.on("close", ...)` handler, which does
+  /// `this.customCommands.delete(clientId)` — the registry (not the command
+  /// timeline, which is deliberately kept) is cleared on disconnect.
+  func testDisconnectClearsCustomCommandsButKeepsTimeline() {
+    let s = SessionStore()
+    s.connectionEstablished(conn("a"))
+    s.commandReceived(cmd("customCommand.register", clientId: "a", payload: registerPayload(id: 1, command: "a")))
+    XCTAssertEqual(s.connections.first?.customCommands.count, 1)
+
+    s.connectionDisconnected(conn("a"))
+    XCTAssertEqual(s.connections.first?.customCommands.count, 0)
+    XCTAssertEqual(s.connections.first?.commands.count, 1)
+  }
+
+  func testCustomCommandRegisterWithUnknownClientIdIsDropped() {
+    let s = SessionStore()
+    s.connectionEstablished(conn("a"))
+    s.commandReceived(cmd("customCommand.register", clientId: "unknown", payload: registerPayload(id: 1, command: "a")))
+    XCTAssertEqual(s.selectedConnection?.customCommands.count, 0)
   }
 }

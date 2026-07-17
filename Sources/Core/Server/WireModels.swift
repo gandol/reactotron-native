@@ -50,6 +50,28 @@ struct CustomCommandArg: Sendable, Equatable {
   let type: String
 }
 
+extension CustomCommand {
+  /// Parses a `customCommand.register` payload (`reactotron-core-contract`'s
+  /// `CustomCommandRegisterPayload`: `{ id: number, command: string, title?,
+  /// description?, args?: [{ name, type }] }`) into a `CustomCommand`, scoped
+  /// to the connection it arrived on (the wire payload itself carries no
+  /// `clientId` — that's a property of the enclosing `Command`).
+  init?(registerPayload payload: JSONValue, clientId: String) {
+    guard let idValue = payload["id"]?.numberValue,
+      let command = payload["command"]?.stringValue
+    else { return nil }
+    self.id = Int(idValue)
+    self.clientId = clientId
+    self.command = command
+    self.title = payload["title"]?.stringValue
+    self.description = payload["description"]?.stringValue
+    self.args = (payload["args"]?.arrayValue ?? []).compactMap { arg in
+      guard let name = arg["name"]?.stringValue else { return nil }
+      return CustomCommandArg(name: name, type: arg["type"]?.stringValue ?? "")
+    }
+  }
+}
+
 nonisolated(unsafe) private let isoWithFraction: ISO8601DateFormatter = {
   let f = ISO8601DateFormatter()
   f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
