@@ -51,6 +51,18 @@ struct CustomCommandArg: Sendable, Equatable {
 }
 
 extension CustomCommand {
+  /// Stable per-(client, command) identity, decoupled from list position or
+  /// the array's `id: Int` (which is only unique per-client, and — per
+  /// `reactotron-core-server.ts`'s unconditional `list.push` — not even
+  /// guaranteed unique within a client on a duplicate register). Use this
+  /// for SwiftUI `ForEach` identity so a `CustomCommandCard`'s local arg
+  /// text (`@State`) stays bound to its command rather than to a list
+  /// index — an index can point at a different command after a search
+  /// filters the list or an earlier command unregisters and later ones
+  /// shift down. Matches the source's React key: `${cc.clientId}-${cc.id}`
+  /// (`customCommands/index.tsx:215`).
+  var stableID: String { "\(clientId)-\(id)" }
+
   /// Parses a `customCommand.register` payload (`reactotron-core-contract`'s
   /// `CustomCommandRegisterPayload`: `{ id: number, command: string, title?,
   /// description?, args?: [{ name, type }] }`) into a `CustomCommand`, scoped

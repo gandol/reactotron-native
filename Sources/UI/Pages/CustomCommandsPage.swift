@@ -42,7 +42,15 @@ struct CustomCommandsPage: View {
       } else {
         ScrollView {
           LazyVStack(alignment: .leading, spacing: 0) {
-            ForEach(Array(filteredCustomCommands.enumerated()), id: \.offset) { _, cc in
+            // Keyed by `stableID` (clientId+id), not list position — a
+            // `CustomCommandCard`'s arg text is local `@State`, so positional
+            // identity would let SwiftUI reuse one card's state for a
+            // DIFFERENT command whenever the list reorders (search narrowing
+            // it, or an earlier command unregistering and shifting later
+            // ones' index), silently sending a typed value against the
+            // wrong command. Matches the source's React key
+            // `${cc.clientId}-${cc.id}` (`customCommands/index.tsx:215`).
+            ForEach(filteredCustomCommands, id: \.stableID) { cc in
               CustomCommandCard(customCommand: cc, onSend: sendCustomCommand)
             }
           }
