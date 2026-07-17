@@ -23,8 +23,7 @@ struct RootView: View {
     }
   }
 
-  /// Routes per `App.tsx`'s `<Routes>` — real pages land in Tasks 8–13; every
-  /// case here is a placeholder until its task ports the corresponding view.
+  /// Routes per `App.tsx`'s `<Routes>` (ported across Tasks 8–14).
   @ViewBuilder private var pageView: some View {
     switch model.currentPage {
     case .home: HomePage()
@@ -34,7 +33,7 @@ struct RootView: View {
     case .nativeOverlay: OverlayPage()
     case .nativeStorybook: StorybookPage()
     case .customCommands: CustomCommandsPage()
-    case .help: Text("Help")  // Task 14
+    case .help: HelpPage()
     }
   }
 
