@@ -10,5 +10,6 @@ struct ReactotronApp: App {
         .frame(minWidth: 900, minHeight: 600)
         .environment(model)
     }
+    .commands { AppCommands(model: model) }
   }
 }

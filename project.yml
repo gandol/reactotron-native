@@ -24,6 +24,12 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.reactotron.native
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.developer-tools
+        # Matches apps/reactotron-app/package.json's "version" at the time of
+        # this port (Task 14) — HelpPage's "Using Reactotron {version}" title
+        # reads this via CFBundleShortVersionString, same as the source reads
+        # projectJson.version. Without an explicit value, GENERATE_INFOPLIST_FILE
+        # falls back to Xcode's unhelpful default.
+        MARKETING_VERSION: "3.11.0"
         ENABLE_APP_SANDBOX: NO
         ENABLE_HARDENED_RUNTIME: NO
   ReactotronTests:
