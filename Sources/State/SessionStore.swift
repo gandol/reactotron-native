@@ -9,6 +9,12 @@ final class SessionConnection: Identifiable {
   var connection: Connection    // latest intro data
   var commands: [Command] = []  // newest first
   var connected = true
+  /// Registry of custom commands this client has `customCommand.register`ed,
+  /// mirroring `reactotron-core-server.ts`'s per-clientId `customCommands`
+  /// map. Cleared on disconnect (see `connectionDisconnected`), matching the
+  /// server's `socket.on("close", ...)` handler — unlike `commands`, which is
+  /// deliberately kept around after disconnect.
+  var customCommands: [CustomCommand] = []
   nonisolated var id: String { clientId }
 
   init(clientId: String, connection: Connection) {
@@ -72,6 +78,11 @@ final class SessionStore {
     if let idx = connections.firstIndex(where: { $0.clientId == connection.clientId }) {
       connections[idx].connected = false
 
+      // Clear the custom-command registry — mirrors the server's
+      // `this.customCommands.delete(clientId)` on socket close. The command
+      // timeline itself is deliberately NOT cleared (see above).
+      connections[idx].customCommands.removeAll()
+
       // If it was selected, select first still-connected connection, else nil
       if selectedClientId == connection.clientId {
         if let firstConnected = connections.first(where: { $0.connected }) {
@@ -94,6 +105,26 @@ final class SessionStore {
     guard let idx = connections.firstIndex(where: { $0.clientId == command.clientId }) else {
       NSLog("Received command for unknown clientId: \(command.clientId ?? "nil")")
       return
+    }
+
+    // Route customCommand.register/unregister into the per-connection
+    // registry, mirroring `reactotron-core-server.ts`'s `customCommands` map
+    // handling. This is IN ADDITION to the normal prepend/trim below — these
+    // commands still land in the ordinary command timeline like any other.
+    switch command.type {
+    case "customCommand.register":
+      // Source (`reactotron-core-server.ts`) does an unconditional
+      // `list.push(...)` here — no id-based dedup — so a duplicate register
+      // legitimately produces two entries.
+      if let customCommand = CustomCommand(registerPayload: command.payload, clientId: connections[idx].clientId) {
+        connections[idx].customCommands.append(customCommand)
+      }
+    case "customCommand.unregister":
+      if let id = command.payload["id"]?.numberValue {
+        connections[idx].customCommands.removeAll { $0.id == Int(id) }
+      }
+    default:
+      break
     }
 
     // Prepend and trim to commandHistoryLimit
