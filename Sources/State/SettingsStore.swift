@@ -18,9 +18,10 @@ final class SettingsStore {
     serverPort = Self.d.object(forKey: "serverPort") as? Int ?? 9090
     commandHistory = Self.d.object(forKey: "commandHistory") as? Int ?? 500
     mcpPort = Self.d.object(forKey: "mcpPort") as? Int ?? 4567
-    mcpRedactionSensitiveKeys = Self.d.stringArray(forKey: "mcpRedactionSensitiveKeys") ?? []  // Task 15 wires Redaction defaults
-    mcpRedactionStatePathPatterns = Self.d.stringArray(forKey: "mcpRedactionStatePathPatterns") ?? []
-    mcpRedactionValuePatterns = Self.d.stringArray(forKey: "mcpRedactionValuePatterns") ?? []
+    // Defaults from Redaction (config.ts seeds these from DEFAULT_REDACTION_RULES).
+    mcpRedactionSensitiveKeys = Self.d.stringArray(forKey: "mcpRedactionSensitiveKeys") ?? Redaction.defaultSensitiveKeys
+    mcpRedactionStatePathPatterns = Self.d.stringArray(forKey: "mcpRedactionStatePathPatterns") ?? Redaction.defaultStatePathPatterns
+    mcpRedactionValuePatterns = Self.d.stringArray(forKey: "mcpRedactionValuePatterns") ?? Redaction.defaultValuePatterns
     mcpAllowClientDisable = Self.d.object(forKey: "mcpAllowClientDisable") as? Bool ?? false
     mcpAllowClientRemoveRules = Self.d.object(forKey: "mcpAllowClientRemoveRules") as? Bool ?? false
   }
