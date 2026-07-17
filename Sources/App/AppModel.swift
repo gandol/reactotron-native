@@ -7,8 +7,7 @@ enum Page: String, CaseIterable {
   case customCommands, help
 }
 
-/// Modal presented over `RootView` via `.sheet(item:)`. `.mcpSettings` is a
-/// placeholder wired up by a later task (15).
+/// Modal presented over `RootView` via `.sheet(item:)`.
 enum Modal: Identifiable {
   case dispatchAction
   case timelineFilter
@@ -33,18 +32,45 @@ final class AppModel {
   var sidebarVisible = true
   var activeModal: Modal?
 
-  /// Display-only until Task 15 wires up the real `McpServer`.
-  var mcpRunning = false
-
   let settings = SettingsStore()
   let session = SessionStore()
   let server = ReactotronServer()
   let timeline = TimelineState()
   let stateUI = StateUIStore()
+  let mcp = McpServer()
 
   init() {
     session.commandHistoryLimit = settings.commandHistory
+    mcp.attach(server: server)
+    mcp.rules = Redaction.Rules(
+      sensitiveKeys: settings.mcpRedactionSensitiveKeys,
+      statePathPatterns: settings.mcpRedactionStatePathPatterns,
+      valuePatterns: settings.mcpRedactionValuePatterns
+    )
     wireServerEvents()
+  }
+
+  /// Toggle the MCP server (Footer chip / button). Replaces the Task 7
+  /// `mcpRunning` placeholder with the real `McpServer`.
+  func toggleMcp() {
+    if mcp.running {
+      mcp.stop()
+    } else {
+      mcp.start(port: settings.mcpPort)
+    }
+  }
+
+  /// Persist the redaction settings and push them live into the running MCP
+  /// server (port of Standalone's `updateMcpRedactionConfig`).
+  func updateMcpRules(sensitiveKeys: [String], statePathPatterns: [String], valuePatterns: [String]) {
+    settings.mcpRedactionSensitiveKeys = sensitiveKeys
+    settings.mcpRedactionStatePathPatterns = statePathPatterns
+    settings.mcpRedactionValuePatterns = valuePatterns
+    mcp.rules = Redaction.Rules(
+      sensitiveKeys: sensitiveKeys,
+      statePathPatterns: statePathPatterns,
+      valuePatterns: valuePatterns
+    )
   }
 
   private func wireServerEvents() {
@@ -61,6 +87,7 @@ final class AppModel {
       Task { @MainActor in
         self?.session.commandReceived(cmd)
         self?.stateUI.handle(command: cmd)
+        self?.mcp.buffer(cmd)
       }
     }
   }

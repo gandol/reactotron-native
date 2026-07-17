@@ -37,17 +37,11 @@ struct RootView: View {
     }
   }
 
-  /// `.mcpSettings` gets a labeled placeholder sheet; other modal cases are
-  /// filled in by the tasks that own their triggering UI.
   @ViewBuilder
   private func modalView(for modal: Modal) -> some View {
     switch modal {
     case .mcpSettings:
-      Text("MCP Settings")
-        .foregroundStyle(Theme.foreground)
-        .padding()
-        .frame(minWidth: 320, minHeight: 200)
-        .background(Theme.background)
+      McpSettingsModal(onClose: { model.activeModal = nil })
     case .timelineFilter:
       TimelineFilterModal(onClose: { model.activeModal = nil })
     case .dispatchAction:

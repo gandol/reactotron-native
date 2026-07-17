@@ -51,6 +51,18 @@ final class ReactotronServer: @unchecked Sendable {
   /// within `queue`).
   var subscriptions: [String] { queue.sync { _subscriptions } }
 
+  /// Established connections, insertion-ordered by connection id. Hops onto
+  /// `queue` synchronously like `subscriptions` — used by the MCP server's
+  /// `resolveClientId`/`connectionMeta` (the equivalent of `server.connections`
+  /// in `reactotron-mcp`).
+  var connectionList: [Connection] { queue.sync { connections.values.sorted { $0.id < $1.id } } }
+
+  /// Custom commands registered by `clientId` (the MCP `list_custom_commands`
+  /// tool reads `server.customCommands.get(clientId)`).
+  func customCommandList(for clientId: String) -> [CustomCommand] {
+    queue.sync { customCommands[clientId] ?? [] }
+  }
+
   // MARK: - Lifecycle
 
   func start(port: UInt16) {

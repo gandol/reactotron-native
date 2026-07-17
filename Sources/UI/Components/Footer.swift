@@ -5,9 +5,9 @@ import SwiftUI
 /// Simplifications for this task (documented, not silent): the connection
 /// row shows name/platform/address + a connected dot rather than the full
 /// per-platform icon set from `connectionHelpers.ts` (`getIcon`), since that
-/// pulls in icons outside Task 7's initial set. The MCP chip is display-only
-/// — bound to `AppModel.mcpRunning`, a placeholder until Task 15 wires the
-/// real `McpServer`.
+/// pulls in icons outside Task 7's initial set. The MCP chip toggles the real
+/// `McpServer` (Task 15): stopped/running :<port>, a redaction-enforced shield
+/// when running, and a gear that opens the redaction settings modal.
 struct Footer: View {
   @Environment(AppModel.self) private var model
   @State private var isOpen = false
@@ -89,26 +89,34 @@ struct Footer: View {
   // MARK: - MCP group
 
   @ViewBuilder private var mcpGroup: some View {
+    let running = model.mcp.running
     HStack(spacing: 2) {
       Button {
-        model.mcpRunning.toggle()  // placeholder toggle; Task 15 wires the real McpServer
+        model.toggleMcp()
       } label: {
         HStack(spacing: 6) {
           Circle()
-            .fill(model.mcpRunning ? Self.mcpGreen : Theme.foregroundDark)
+            .fill(running ? Self.mcpGreen : Theme.foregroundDark)
             .frame(width: 6, height: 6)
-          Text(model.mcpRunning ? "MCP :\(model.settings.mcpPort)" : "MCP")
+          Text(running ? "MCP :\(model.mcp.port ?? model.settings.mcpPort)" : "MCP")
             .font(Theme.font(11))
+          // Redaction-enforced shield — this port always applies the server
+          // rules while running (no per-client opt-out off the wire).
+          if running, model.mcp.redactionEnforced {
+            Image(systemName: "lock.shield.fill")
+              .font(.system(size: 10))
+              .help("Redaction enforced")
+          }
         }
-        .foregroundStyle(model.mcpRunning ? Self.mcpGreen : Theme.foregroundDark)
+        .foregroundStyle(running ? Self.mcpGreen : Theme.foregroundDark)
         .padding(.horizontal, 8)
         .padding(.vertical, 2)
-        .background(RoundedRectangle(cornerRadius: 3).fill(model.mcpRunning ? Self.mcpGreen.opacity(0.15) : Color.clear))
-        .overlay(RoundedRectangle(cornerRadius: 3).stroke(model.mcpRunning ? Self.mcpGreen.opacity(0.4) : Theme.chromeLine, lineWidth: 1))
+        .background(RoundedRectangle(cornerRadius: 3).fill(running ? Self.mcpGreen.opacity(0.15) : Color.clear))
+        .overlay(RoundedRectangle(cornerRadius: 3).stroke(running ? Self.mcpGreen.opacity(0.4) : Theme.chromeLine, lineWidth: 1))
       }
       .buttonStyle(.plain)
 
-      if model.mcpRunning {
+      if running {
         Button {
           model.activeModal = .mcpSettings
         } label: {
