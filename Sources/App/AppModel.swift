@@ -32,12 +32,18 @@ final class AppModel {
   var sidebarVisible = true
   var activeModal: Modal?
 
+  /// Non-fatal Android/adb notice (adb missing, spawn failure, …), shown as
+  /// a dismissible alert by `RootView`. Equivalent of Electron's
+  /// `dialog.showMessageBox` warning in `utils.ts`.
+  var androidNotice: String?
+
   let settings = SettingsStore()
   let session = SessionStore()
   let server = ReactotronServer()
   let timeline = TimelineState()
   let stateUI = StateUIStore()
   let mcp = McpServer()
+  let android = AndroidDeviceManager()
 
   init() {
     session.commandHistoryLimit = settings.commandHistory
@@ -48,6 +54,9 @@ final class AppModel {
       valuePatterns: settings.mcpRedactionValuePatterns
     )
     wireServerEvents()
+    android.onNotice = { [weak self] message in
+      Task { @MainActor in self?.androidNotice = message }
+    }
   }
 
   /// Toggle the MCP server (Footer chip / button). Replaces the Task 7
@@ -92,8 +101,15 @@ final class AppModel {
     }
   }
 
-  func startServer() { server.start(port: UInt16(settings.serverPort)) }
-  func stopServer() { server.stop() }
+  func startServer() {
+    server.start(port: UInt16(settings.serverPort))
+    android.start(serverPort: settings.serverPort)
+  }
+
+  func stopServer() {
+    server.stop()
+    android.stop()
+  }
 
   /// Equivalent of Electron's sendCommand — targets the selected client.
   func sendCommand(type: String, payload: JSONValue) {
