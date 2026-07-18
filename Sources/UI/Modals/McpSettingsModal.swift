@@ -75,7 +75,16 @@ struct McpSettingsModal: View {
               }
             }
 
-            section(title: "Client Permissions", description: nil) {
+            // Persisted but not yet enforced: this port has no per-client wire
+            // protocol for a connected app to request a redaction opt-out (the
+            // `mcpRedaction`/`resolveEffectiveRules` mechanism from redaction.ts
+            // isn't implemented here — see McpServer.redactionEnforced). The
+            // toggles below save to SettingsStore like the rest of the modal,
+            // but redaction is always enforced regardless of their state.
+            section(
+              title: "Client Permissions",
+              description: "Client-side redaction opt-out is not implemented in this build; redaction is always enforced."
+            ) {
               VStack(alignment: .leading, spacing: 8) {
                 Toggle("Allow apps to disable redaction entirely", isOn: $settings.mcpAllowClientDisable)
                 Toggle("Allow apps to remove default rules", isOn: $settings.mcpAllowClientRemoveRules)
