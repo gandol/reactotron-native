@@ -52,7 +52,8 @@ passing.**
 Nothing changes on the client side. Point `reactotron-react-native`, `reactotron-react-js`, or any
 `reactotron-core-client`-based plugin at the same host/port you'd use for the Electron app:
 
-- Default port: **9090** (configurable in-app; persisted via `UserDefaults`)
+- Default port: **9090** (persisted in `UserDefaults` under `serverPort`; no in-app settings UI
+  yet, so change it externally with `defaults write com.reactotron.native serverPort <port>`)
 - Protocol: plain `ws://` (JSON messages framed as WebSocket text frames) — see
   [Out of scope](#out-of-scope) for why there's no `wss://`/TLS variant
 - On `client.intro`, the server assigns and returns a `clientId` (via `setClientId`) unless the
@@ -73,7 +74,8 @@ An optional built-in MCP server lets an AI coding assistant (Claude Code, Claude
 inspect and drive a connected app directly, without a human relaying timeline events by hand.
 
 - Toggle on/off from the footer chip (or the MCP settings modal)
-- Default port: **4567** (configurable), endpoint: `http://localhost:4567/mcp`
+- Default port: **4567** (persisted in `UserDefaults` under `mcpPort`; no in-app port UI yet — set
+  it with `defaults write com.reactotron.native mcpPort <port>`), endpoint: `http://localhost:4567/mcp`
 - Transport: a minimal HTTP/1.1 JSON-RPC server (`MinimalHTTPServer`) implementing just enough of
   the MCP "streamable HTTP" transport for a request/response exchange — `POST /mcp` with a
   JSON-RPC 2.0 body, `OPTIONS` for CORS preflight, `DELETE` as a no-op session teardown
