@@ -82,6 +82,10 @@ final class AndroidDeviceManager: @unchecked Sendable {
   func start(serverPort: Int) {
     queue.async { [weak self] in
       guard let self else { return }
+      // Idempotent: a caller retrying start() (e.g. SideBar's port-unavailable
+      // retry) must never leave a prior track-devices process running
+      // unreachable by stop(). Tear down any existing one before spawning.
+      self.teardownTrackProcess()
       self.stopped = false
       self.noticeShown = false
       self.runInitialPassAndTrack(serverPort: serverPort)
@@ -92,12 +96,19 @@ final class AndroidDeviceManager: @unchecked Sendable {
     queue.async { [weak self] in
       guard let self else { return }
       self.stopped = true
-      if let pipe = self.trackProcess?.standardOutput as? Pipe {
-        pipe.fileHandleForReading.readabilityHandler = nil
-      }
-      self.trackProcess?.terminate()
-      self.trackProcess = nil
+      self.teardownTrackProcess()
     }
+  }
+
+  /// Terminates and releases the current track-devices process, if any.
+  /// Queue-confined — always called from within a `queue.async` block, so
+  /// this is the single synchronized place `trackProcess` is torn down.
+  private func teardownTrackProcess() {
+    if let pipe = trackProcess?.standardOutput as? Pipe {
+      pipe.fileHandleForReading.readabilityHandler = nil
+    }
+    trackProcess?.terminate()
+    trackProcess = nil
   }
 
   // MARK: - Pass orchestration (queue-confined)
@@ -135,7 +146,12 @@ final class AndroidDeviceManager: @unchecked Sendable {
     process.terminationHandler = { [weak self] proc in
       guard let self else { return }
       self.queue.async {
-        if !self.stopped && proc.terminationStatus != 0 {
+        // Identity check, not just `stopped`: a repeat start() tears down
+        // and replaces `trackProcess` before this fires, so an old
+        // process's own termination must not be mistaken for the new
+        // process (or any process) having crashed.
+        guard self.trackProcess === proc else { return }
+        if proc.terminationStatus != 0 {
           self.emitNoticeOnce("adb track-devices exited unexpectedly.")
         }
       }
@@ -144,7 +160,10 @@ final class AndroidDeviceManager: @unchecked Sendable {
     stdout.fileHandleForReading.readabilityHandler = { [weak self] handle in
       let data = handle.availableData
       guard !data.isEmpty else {
-        handle.readabilityHandler = nil
+        // Clear on the serial queue (not this callback thread) so every
+        // mutation touching track-devices process/pipe state is
+        // synchronized through one place.
+        self?.queue.async { handle.readabilityHandler = nil }
         return
       }
       guard let self else { return }
@@ -187,13 +206,18 @@ final class AndroidDeviceManager: @unchecked Sendable {
 
   private static func probeAdbViaPATH() -> Bool {
     let process = makeProcess(.path, arguments: ["version"])
-    process.standardOutput = Pipe()
+    let stdout = Pipe()
+    process.standardOutput = stdout
     process.standardError = Pipe()
     do {
       try process.run()
     } catch {
       return false
     }
+    // Read before waiting to avoid deadlock if adb fills the pipe buffer
+    // (mirrors runAdb below). This runs synchronously on `queue` at the
+    // top of every start(), so a hang here would stall the whole manager.
+    _ = stdout.fileHandleForReading.readDataToEndOfFile()
     process.waitUntilExit()
     return process.terminationStatus == 0
   }
