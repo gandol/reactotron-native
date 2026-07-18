@@ -23,6 +23,16 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.reactotron.native
         GENERATE_INFOPLIST_FILE: YES
+        # Display name shown in the Dock, Finder, and Cmd-Tab switcher. Kept
+        # separate from the target/binary name (Reactotron) so build/scheme
+        # commands, the test host, and DerivedData paths stay unchanged.
+        # (CFBundleName / the menu-bar title stays "Reactotron" because Xcode
+        # locks it to PRODUCT_NAME; changing that would rename the .app and
+        # break the ReactotronTests test host.)
+        INFOPLIST_KEY_CFBundleDisplayName: "Reactotron macOS Native"
+        # App icon (Dock/Finder/Cmd-Tab) from the AppIcon set in
+        # Sources/Resources/Assets.xcassets, generated from the Reactotron logo.
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.developer-tools
         # Matches apps/reactotron-app/package.json's "version" at the time of
         # this port (Task 14) — HelpPage's "Using Reactotron {version}" title
