@@ -18,6 +18,17 @@ struct RootView: View {
     .sheet(item: $model.activeModal) { modal in
       modalView(for: modal)
     }
+    .alert(
+      "Android communication problem",
+      isPresented: Binding(
+        get: { model.androidNotice != nil },
+        set: { isPresented in if !isPresented { model.androidNotice = nil } }
+      )
+    ) {
+      Button("OK", role: .cancel) { model.androidNotice = nil }
+    } message: {
+      Text(model.androidNotice ?? "")
+    }
     .task {
       model.startServer()
     }
