@@ -4,3 +4,5 @@ DerivedData/
 build/
 .superpowers/
 .claude/
+docs/
+dist/
