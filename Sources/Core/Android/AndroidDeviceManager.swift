@@ -191,9 +191,14 @@ final class AndroidDeviceManager: @unchecked Sendable {
 
   /// Tries PATH first (`/usr/bin/env adb version`); falls back to
   /// `$ANDROID_HOME/platform-tools/adb`, then
-  /// `$ANDROID_SDK_ROOT/platform-tools/adb`. Neither env var appears in
-  /// utils.ts — this fallback is a deliberate addition for the native
-  /// app, documented in the task report.
+  /// `$ANDROID_SDK_ROOT/platform-tools/adb`, and finally the well-known
+  /// default SDK install locations. `utils.ts` reads none of these — it
+  /// relies solely on the shell's PATH — but a GUI-launched macOS app
+  /// (from /Applications or Finder) inherits neither the interactive
+  /// shell's PATH nor its exported `ANDROID_HOME`, so without these
+  /// fallbacks adb is "not found" on machines that clearly have it (e.g.
+  /// a standard Android Studio install). This is a deliberate native-app
+  /// addition, documented in the task report.
   static func resolveAdb() -> AdbLocation? {
     if probeAdbViaPATH() {
       return .path
@@ -201,7 +206,27 @@ final class AndroidDeviceManager: @unchecked Sendable {
     if let explicitPath = resolveAdbViaAndroidHome() {
       return .explicit(explicitPath)
     }
+    if let defaultPath = resolveAdbViaDefaultSdkLocations() {
+      return .explicit(defaultPath)
+    }
     return nil
+  }
+
+  /// Well-known SDK install locations checked when neither PATH nor the
+  /// `ANDROID_*` env vars are visible (the common case for a GUI app):
+  /// Android Studio's default (`~/Library/Android/sdk`), a bare
+  /// command-line-tools install (`~/Library/Android/sdk` is shared),
+  /// and Homebrew's `android-platform-tools` cask (`adb` symlinked into
+  /// the brew bin, whose dir a GUI app's PATH also usually omits).
+  private static func resolveAdbViaDefaultSdkLocations() -> String? {
+    let home = FileManager.default.homeDirectoryForCurrentUser.path
+    let candidates = [
+      "\(home)/Library/Android/sdk/platform-tools/adb",
+      "\(home)/Android/Sdk/platform-tools/adb",
+      "/opt/homebrew/bin/adb",
+      "/usr/local/bin/adb",
+    ]
+    return candidates.first { FileManager.default.isExecutableFile(atPath: $0) }
   }
 
   private static func probeAdbViaPATH() -> Bool {
