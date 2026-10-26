@@ -237,7 +237,7 @@ final class McpCore: @unchecked Sendable {
     "2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05", "2024-10-07",
   ]
 
-  private func initializeResult(_ params: [String: JSONValue]) -> JSONValue {
+  private func initializeResult(_ params: JSONObject) -> JSONValue {
     let requested = params["protocolVersion"]?.stringValue
     let protocolVersion = requested.flatMap { Self.supportedProtocolVersions.contains($0) ? $0 : nil }
       ?? Self.latestProtocolVersion
@@ -353,7 +353,7 @@ final class McpCore: @unchecked Sendable {
     return .object(["tools": .array(tools)])
   }
 
-  private func tool(name: String, description: String, properties: [String: JSONValue], required: [String]) -> JSONValue {
+  private func tool(name: String, description: String, properties: JSONObject, required: [String]) -> JSONValue {
     .object([
       "name": .string(name),
       "description": .string(description),
@@ -363,7 +363,7 @@ final class McpCore: @unchecked Sendable {
 
   // MARK: - tools/call
 
-  private func toolsCall(_ params: [String: JSONValue]) -> Outcome {
+  private func toolsCall(_ params: JSONObject) -> Outcome {
     let name = params["name"]?.stringValue ?? ""
     let args = params["arguments"]?.objectValue ?? [:]
     switch name {
@@ -409,12 +409,12 @@ final class McpCore: @unchecked Sendable {
     return nil
   }
 
-  private func dispatchAction(_ args: [String: JSONValue]) -> JSONValue {
+  private func dispatchAction(_ args: JSONObject) -> JSONValue {
     let (clientId, error) = resolveClientId(args["clientId"]?.stringValue)
     if let error { return textResult(.object(["status": .string("error"), "message": .string(error)])) }
     guard let server = currentServer() else { return textResult(.object(["status": .string("error"), "message": .string("No apps connected to Reactotron.")])) }
 
-    var actionObj: [String: JSONValue] = ["type": args["actionType"] ?? .string("")]
+    var actionObj: JSONObject = ["type": args["actionType"] ?? .string("")]
     if let payload = args["actionPayload"] { actionObj["payload"] = payload }
     let action = JSONValue.object(actionObj)
 
@@ -432,7 +432,7 @@ final class McpCore: @unchecked Sendable {
     ]))
   }
 
-  private func requestState(_ args: [String: JSONValue]) -> JSONValue {
+  private func requestState(_ args: JSONObject) -> JSONValue {
     let (clientId, error) = resolveClientId(args["clientId"]?.stringValue)
     if let error { return textResult(.object(["status": .string("error"), "message": .string(error)])) }
     guard let server = currentServer() else { return textResult(.object(["status": .string("error"), "message": .string("No apps connected to Reactotron.")])) }
@@ -455,7 +455,7 @@ final class McpCore: @unchecked Sendable {
     ]))
   }
 
-  private func requestStateKeys(_ args: [String: JSONValue]) -> JSONValue {
+  private func requestStateKeys(_ args: JSONObject) -> JSONValue {
     let (clientId, error) = resolveClientId(args["clientId"]?.stringValue)
     if let error { return textResult(.object(["status": .string("error"), "message": .string(error)])) }
     guard let server = currentServer() else { return textResult(.object(["status": .string("error"), "message": .string("No apps connected to Reactotron.")])) }
@@ -478,7 +478,7 @@ final class McpCore: @unchecked Sendable {
     ]))
   }
 
-  private func swapState(_ args: [String: JSONValue]) -> JSONValue {
+  private func swapState(_ args: JSONObject) -> JSONValue {
     let (clientId, error) = resolveClientId(args["clientId"]?.stringValue)
     if let error { return textResult(.object(["status": .string("error"), "message": .string(error)])) }
     guard let server = currentServer() else { return textResult(.object(["status": .string("error"), "message": .string("No apps connected to Reactotron.")])) }
@@ -487,19 +487,19 @@ final class McpCore: @unchecked Sendable {
     return textResult(.object(["status": .string("swapped"), "message": .string("State replacement sent to app.")]))
   }
 
-  private func sendCustomCommand(_ args: [String: JSONValue]) -> JSONValue {
+  private func sendCustomCommand(_ args: JSONObject) -> JSONValue {
     let (clientId, error) = resolveClientId(args["clientId"]?.stringValue)
     if let error { return textResult(.object(["status": .string("error"), "message": .string(error)])) }
     guard let server = currentServer() else { return textResult(.object(["status": .string("error"), "message": .string("No apps connected to Reactotron.")])) }
 
     let command = args["command"]?.stringValue ?? ""
-    var payload: [String: JSONValue] = ["command": .string(command)]
+    var payload: JSONObject = ["command": .string(command)]
     if let a = args["args"] { payload["args"] = a }
     server.send(type: "custom", payload: .object(payload), clientId: clientId)
     return textResult(.object(["status": .string("sent"), "command": .string(command)]))
   }
 
-  private func listCustomCommands(_ args: [String: JSONValue]) -> JSONValue {
+  private func listCustomCommands(_ args: JSONObject) -> JSONValue {
     let (clientId, error) = resolveClientId(args["clientId"]?.stringValue)
     if let error { return textResult(.object(["status": .string("error"), "message": .string(error)])) }
     guard let server = currentServer(), let clientId else {
@@ -520,7 +520,7 @@ final class McpCore: @unchecked Sendable {
     return textResult(.object(["status": .string("success"), "commands": .array(commands)]))
   }
 
-  private func showOverlay(_ args: [String: JSONValue]) -> JSONValue {
+  private func showOverlay(_ args: JSONObject) -> JSONValue {
     let (clientId, error) = resolveClientId(args["clientId"]?.stringValue)
     if let error { return textResult(.object(["status": .string("error"), "message": .string(error)])) }
     guard let server = currentServer() else { return textResult(.object(["status": .string("error"), "message": .string("No apps connected to Reactotron.")])) }
@@ -574,7 +574,7 @@ final class McpCore: @unchecked Sendable {
     return textResult(.object(["status": .string("cleared"), "eventsRemoved": .number(Double(count))]))
   }
 
-  private func subscribeState(_ args: [String: JSONValue]) -> JSONValue {
+  private func subscribeState(_ args: JSONObject) -> JSONValue {
     let path = args["path"]?.stringValue ?? ""
     if path.isEmpty { return textResult(.object(["status": .string("error"), "message": .string("path is required")])) }
     guard let server = currentServer() else { return textResult(.object(["status": .string("error"), "message": .string("path is required")])) }
@@ -584,7 +584,7 @@ final class McpCore: @unchecked Sendable {
     return textResult(.object(["status": .string("subscribed"), "path": .string(path), "activeSubscriptions": .array(active)]))
   }
 
-  private func unsubscribeState(_ args: [String: JSONValue]) -> JSONValue {
+  private func unsubscribeState(_ args: JSONObject) -> JSONValue {
     let path = args["path"]?.stringValue ?? ""
     if path.isEmpty { return textResult(.object(["status": .string("error"), "message": .string("path is required")])) }
     guard let server = currentServer() else { return textResult(.object(["status": .string("error"), "message": .string("path is required")])) }
@@ -641,7 +641,7 @@ final class McpCore: @unchecked Sendable {
   /// over the distinct buffered types, capped at 100 (`createCompletionResult`).
   /// A static resource URI or an argument with no completer yields the SDK's
   /// `EMPTY_COMPLETION_RESULT`; any other ref is "Resource template … not found".
-  private func completionComplete(_ params: [String: JSONValue]) -> Outcome {
+  private func completionComplete(_ params: JSONObject) -> Outcome {
     let empty: JSONValue = .object(["completion": .object(["values": .array([]), "hasMore": .bool(false)])])
     guard let ref = params["ref"]?.objectValue,
       let argument = params["argument"]?.objectValue,
@@ -689,7 +689,7 @@ final class McpCore: @unchecked Sendable {
     ])
   }
 
-  private func resourcesRead(_ params: [String: JSONValue]) -> Outcome {
+  private func resourcesRead(_ params: JSONObject) -> Outcome {
     guard let uri = params["uri"]?.stringValue else {
       return .failure(-32602, "Missing uri")
     }
@@ -821,8 +821,11 @@ final class McpCore: @unchecked Sendable {
     ])
   }
 
+  /// The payload may hold lazy `.raw` subtrees; every caller passes the
+  /// result through `redact`, which materializes them, so raw wire bytes
+  /// never reach the client unredacted.
   private func commandToJSON(_ c: Command) -> JSONValue {
-    var o: [String: JSONValue] = [
+    var o: JSONObject = [
       "type": .string(c.type),
       "connectionId": .number(Double(c.connectionId)),
       "messageId": .number(Double(c.messageId)),
@@ -974,8 +977,8 @@ final class McpCore: @unchecked Sendable {
     .object(["type": .array([.string("string"), .string("null")]), "description": .string(desc)])
   }
 
-  private func objectSchema(properties: [String: JSONValue], required: [String], description: String? = nil) -> JSONValue {
-    var o: [String: JSONValue] = ["type": .string("object"), "properties": .object(properties)]
+  private func objectSchema(properties: JSONObject, required: [String], description: String? = nil) -> JSONValue {
+    var o: JSONObject = ["type": .string("object"), "properties": .object(properties)]
     if !required.isEmpty { o["required"] = .array(required.map(JSONValue.string)) }
     if let description { o["description"] = .string(description) }
     return .object(o)

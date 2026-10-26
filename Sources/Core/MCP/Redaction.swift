@@ -103,28 +103,37 @@ enum Redaction {
       })
     case .object(let obj):
       return redactObject(obj, parsed: parsed, currentPath: currentPath, jsonDepth: jsonDepth)
+    case .raw(let r):
+      // Lazy wire subtree: parse it and redact the parse. The result never
+      // contains `.raw`, so raw wire bytes can't leave the process unredacted.
+      return redactValue(r.materialize(), parsed: parsed, currentPath: currentPath, jsonDepth: jsonDepth)
     }
   }
 
+  /// Rebuilds the object in its original key order (keys are already unique,
+  /// so pairs are appended without a lookup).
   private static func redactObject(
-    _ obj: [String: JSONValue], parsed: ParsedRules, currentPath: String, jsonDepth: Int
+    _ obj: JSONObject, parsed: ParsedRules, currentPath: String, jsonDepth: Int
   ) -> JSONValue {
-    var result: [String: JSONValue] = [:]
+    var result = JSONObject()
+    result.reserveCapacity(obj.count)
     for (key, value) in obj {
       // Common case first — most keys aren't path-pattern matches.
       if parsed.sensitiveKeysLower.contains(key.lowercased()) {
-        result[key] = .string(REDACTED)
+        result.appendUnchecked(key: key, value: .string(REDACTED))
         continue
       }
       if parsed.trackPaths {
         let childPath = currentPath.isEmpty ? key : "\(currentPath).\(key)"
         if matchesStatePath(childPath, parsed.statePathPatterns) {
-          result[key] = .string(REDACTED)
+          result.appendUnchecked(key: key, value: .string(REDACTED))
           continue
         }
-        result[key] = redactValue(value, parsed: parsed, currentPath: childPath, jsonDepth: jsonDepth)
+        result.appendUnchecked(
+          key: key, value: redactValue(value, parsed: parsed, currentPath: childPath, jsonDepth: jsonDepth))
       } else {
-        result[key] = redactValue(value, parsed: parsed, currentPath: "", jsonDepth: jsonDepth)
+        result.appendUnchecked(
+          key: key, value: redactValue(value, parsed: parsed, currentPath: "", jsonDepth: jsonDepth))
       }
     }
     return .object(result)
@@ -264,7 +273,7 @@ private struct ParsedRules {
 extension JSONValue {
   var isObjectOrArray: Bool {
     switch self {
-    case .object, .array: true
+    case .object, .array, .raw: true
     default: false
     }
   }

@@ -194,16 +194,10 @@ func copyToClipboard(_ text: String) {
 
 /// Pretty-printed, key-sorted JSON text for clipboard copies — nicer than
 /// `JSONValue.encodedString()`'s compact output for pasting into an editor
-/// (source uses `JSON.stringify(x, null, 2)` for the same buttons). Falls
-/// back to the compact encoding, and then to an empty string, rather than
-/// crashing on values `JSONEncoder` can't represent.
+/// (source uses `JSON.stringify(x, null, 2)` for the same buttons; same
+/// layout here, but keys stay sorted).
 func prettyJSON(_ value: JSONValue) -> String {
-  let encoder = JSONEncoder()
-  encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-  if let data = try? encoder.encode(value), let s = String(data: data, encoding: .utf8) {
-    return s
-  }
-  return value.encodedString() ?? ""
+  JSONWriter.pretty(value, sortedKeys: true)
 }
 
 /// Mirrors `components/ContentView`'s `try { checkValue = JSON.parse(value) }

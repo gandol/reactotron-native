@@ -91,7 +91,7 @@ struct CustomCommandsPage: View {
 
   /// Port of `CustomCommandsContext`'s `sendCustomCommand`: `sendCommand("custom",
   /// { command, args })`.
-  private func sendCustomCommand(_ command: String, _ args: [String: JSONValue]) {
+  private func sendCustomCommand(_ command: String, _ args: JSONObject) {
     model.sendCommand(type: "custom", payload: .object(["command": .string(command), "args": .object(args)]))
   }
 
@@ -112,7 +112,7 @@ struct CustomCommandsPage: View {
 /// `useReducer` initializer), and a Send button.
 private struct CustomCommandCard: View {
   let customCommand: CustomCommand
-  let onSend: (String, [String: JSONValue]) -> Void
+  let onSend: (String, JSONObject) -> Void
 
   @State private var argValues: [String: String] = [:]
 
@@ -179,7 +179,7 @@ private struct CustomCommandCard: View {
   /// Port of `sendCustomCommand(customCommand.command, state)` — `state` is the
   /// reducer's arg map, one key per declared arg, defaulting to `""`.
   private func send() {
-    var args: [String: JSONValue] = [:]
+    var args: JSONObject = [:]
     for arg in customCommand.args {
       args[arg.name] = .string(argValues[arg.name] ?? "")
     }

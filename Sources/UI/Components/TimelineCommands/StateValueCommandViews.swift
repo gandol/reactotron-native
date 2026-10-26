@@ -34,9 +34,8 @@ struct StateValuesChangeCommandView: View {
 
   /// `hasX = !!payload.x && !Array.isArray(payload.x)` from source, gated to
   /// only real objects (the only shape with anything meaningful to show).
-  private func presentObject(_ v: JSONValue?) -> [String: JSONValue]? {
-    guard let v, case .object(let dict) = v else { return nil }
-    return dict
+  private func presentObject(_ v: JSONValue?) -> JSONObject? {
+    v?.objectValue
   }
 }
 

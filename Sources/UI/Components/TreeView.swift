@@ -26,6 +26,11 @@ func treePreview(_ value: JSONValue) -> String {
     let capped = sorted.prefix(3).map { "\($0): …" }
     let suffix = sorted.count > 3 ? ", …" : ""
     return "{\(capped.joined(separator: ", "))\(suffix)}"
+  case .raw(let r):
+    // Lazy subtree: an array's preview is just its count (no parse); an
+    // object's needs its keys.
+    if !r.isObject { return r.count == 1 ? "1 item" : "\(r.count) items" }
+    return treePreview(r.materialize())
   }
 }
 
@@ -45,12 +50,8 @@ struct TreeView: View {
     // Auto-expand the root node initially, matching reactotron-core-ui's
     // TreeView (`shouldExpandNodeInitially` with the default level), so the
     // top-level keys are visible without a click. Nested nodes stay collapsed.
-    let expandsRoot: Bool
-    switch value {
-    case .object(let d): expandsRoot = !d.isEmpty
-    case .array(let a): expandsRoot = !a.isEmpty
-    default: expandsRoot = false
-    }
+    // `containerCount` reads a lazy `.raw` value's count without parsing it.
+    let expandsRoot = (value.containerCount ?? 0) > 0
     _expanded = State(initialValue: expandsRoot ? ["root"] : [])
   }
 
@@ -80,12 +81,14 @@ private struct _TreeNode: View {
   let keyLabel: String?
   @Binding var expanded: Set<String>
 
-  private var isExpandable: Bool {
-    switch value {
-    case .array, .object: true
-    default: false
-    }
-  }
+  /// Parses a lazy `.raw` value once, for as long as this node is on screen.
+  @State private var box = MaterializedJSON()
+
+  /// `value`, with a lazy `.raw` subtree parsed (cached in `box`). Children
+  /// of a parsed subtree are already parsed.
+  private var resolved: JSONValue { box.resolve(value) }
+
+  private var isExpandable: Bool { value.isObject || value.isArray }
 
   private var isExpanded: Bool {
     expanded.contains(path)
@@ -145,7 +148,7 @@ private struct _TreeNode: View {
 
   private var copyButton: some View {
     Button {
-      copyToClipboard(prettyJSON(value))
+      copyToClipboard(prettyJSON(resolved))
     } label: {
       Text("Copy")
         .font(Theme.font(10))
@@ -173,20 +176,22 @@ private struct _TreeNode: View {
     }
   }
 
+  /// Previews come from `resolved` (the cached parse), never `value`:
+  /// `treePreview` of a `.raw` object parses it again, on every redraw.
   @ViewBuilder
   private var rowContent: some View {
-    switch value {
+    switch resolved {
     case .object(let dict):
       if isExpanded {
         label("{ \(dict.count) keys }", color: Theme.foregroundDark)
       } else {
-        label(treePreview(value), color: Theme.foregroundDark)
+        label(treePreview(resolved), color: Theme.foregroundDark)
       }
     case .array(let items):
       if isExpanded {
         label("[ \(items.count) items ]", color: Theme.foregroundDark)
       } else {
-        label(treePreview(value), color: Theme.foregroundDark)
+        label(treePreview(resolved), color: Theme.foregroundDark)
       }
     case .string(let s):
       label("\"\(s)\"", color: Theme.string)
@@ -200,6 +205,8 @@ private struct _TreeNode: View {
       label(b ? "true" : "false", color: Theme.constant)
     case .null:
       label("null", color: Theme.constant)
+    case .raw:
+      label(treePreview(resolved), color: Theme.foregroundDark)  // unreachable: `resolved` is parsed
     }
   }
 
@@ -215,19 +222,18 @@ private struct _TreeNode: View {
 
   @ViewBuilder
   private var children: some View {
-    switch value {
+    switch resolved {
     case .object(let dict):
-      let keys = dict.keys.sorted()
-      ForEach(keys, id: \.self) { key in
-        if let child = dict[key] {
-          _TreeNode(
-            value: child,
-            level: level + 1,
-            path: "\(path).\(key)",
-            keyLabel: key,
-            expanded: $expanded
-          )
-        }
+      // Sorted pairs rather than sorted keys + lookup (a linear scan on
+      // `JSONObject`, which would make big objects quadratic).
+      ForEach(dict.sorted { $0.key < $1.key }, id: \.key) { pair in
+        _TreeNode(
+          value: pair.value,
+          level: level + 1,
+          path: "\(path).\(pair.key)",
+          keyLabel: pair.key,
+          expanded: $expanded
+        )
       }
     case .array(let items):
       ForEach(Array(items.enumerated()), id: \.offset) { index, child in

@@ -1,45 +1,76 @@
 import Foundation
 
-enum JSONValue: Codable, Equatable, Sendable {
+/// Untyped JSON value — the Swift stand-in for whatever `JSON.parse` hands the
+/// upstream server. Objects keep wire key order (`JSONObject`), like JS.
+///
+/// Not `Codable` on purpose: Foundation's `JSONDecoder`/`JSONEncoder` lose key
+/// order and spell numbers differently from JS, so all reading and writing
+/// goes through `JSONParser` / `JSONWriter` (see their doc comments).
+enum JSONValue: Equatable, Sendable {
   case null
   case bool(Bool)
   case number(Double)
   case string(String)
   case array([JSONValue])
-  case object([String: JSONValue])
-
-  init(from decoder: Decoder) throws {
-    let c = try decoder.singleValueContainer()
-    if c.decodeNil() { self = .null }
-    else if let b = try? c.decode(Bool.self) { self = .bool(b) }
-    else if let n = try? c.decode(Double.self) { self = .number(n) }
-    else if let s = try? c.decode(String.self) { self = .string(s) }
-    else if let a = try? c.decode([JSONValue].self) { self = .array(a) }
-    else if let o = try? c.decode([String: JSONValue].self) { self = .object(o) }
-    else {
-      throw DecodingError.dataCorruptedError(in: c, debugDescription: "Unsupported JSON value")
-    }
-  }
-
-  func encode(to encoder: Encoder) throws {
-    var c = encoder.singleValueContainer()
-    switch self {
-    case .null: try c.encodeNil()
-    case .bool(let b): try c.encode(b)
-    // JSON has no NaN/Infinity; encode as null (JS JSON.stringify does the same)
-    case .number(let n): n.isFinite ? try c.encode(n) : try c.encodeNil()
-    case .string(let s): try c.encode(s)
-    case .array(let a): try c.encode(a)
-    case .object(let o): try c.encode(o)
-    }
-  }
+  case object(JSONObject)
+  /// A large container from a command payload, still as its wire bytes
+  /// (memory optimization, see `RawJSON` / `LazyJSONPolicy`). Only the wire
+  /// parser in lazy mode produces it. The accessors below materialize it on
+  /// demand, so code that doesn't know about it stays correct; hot paths use
+  /// the zero-parse helpers (`isArray`, `isObject`, `containerCount`,
+  /// `isTruthy`) or `JSONWriter`, which emits canonical bytes verbatim.
+  case raw(RawJSON)
 
   var stringValue: String? { if case .string(let s) = self { s } else { nil } }
   var numberValue: Double? { if case .number(let n) = self { n } else { nil } }
   var boolValue: Bool? { if case .bool(let b) = self { b } else { nil } }
-  var arrayValue: [JSONValue]? { if case .array(let a) = self { a } else { nil } }
-  var objectValue: [String: JSONValue]? { if case .object(let o) = self { o } else { nil } }
-  var isNull: Bool { self == .null }
+  var arrayValue: [JSONValue]? {
+    switch self {
+    case .array(let a): a
+    case .raw(let r) where !r.isObject: r.materialize().arrayValue
+    default: nil
+    }
+  }
+  var objectValue: JSONObject? {
+    switch self {
+    case .object(let o): o
+    case .raw(let r) where r.isObject: r.materialize().objectValue
+    default: nil
+    }
+  }
+  var isNull: Bool { if case .null = self { true } else { false } }
+
+  /// Zero-parse shape checks (a `.raw` value knows its bracket).
+  var isArray: Bool {
+    switch self {
+    case .array: true
+    case .raw(let r): !r.isObject
+    default: false
+    }
+  }
+  var isObject: Bool {
+    switch self {
+    case .object: true
+    case .raw(let r): r.isObject
+    default: false
+    }
+  }
+  /// Key / item count of an object or array (raw included, without parsing).
+  var containerCount: Int? {
+    switch self {
+    case .array(let a): a.count
+    case .object(let o): o.count
+    case .raw(let r): r.count
+    default: nil
+    }
+  }
+
+  /// `self`, with a top-level `.raw` parsed (one level of laziness removed —
+  /// its parse is fully materialized, so the result contains no `.raw`).
+  var materialized: JSONValue {
+    if case .raw(let r) = self { return r.materialize() }
+    return self
+  }
 
   subscript(_ key: String) -> JSONValue? { objectValue?[key] }
   subscript(_ index: Int) -> JSONValue? {
@@ -54,16 +85,44 @@ enum JSONValue: Codable, Equatable, Sendable {
     case .bool(let b): b
     case .number(let n): n != 0 && !n.isNaN
     case .string(let s): !s.isEmpty
-    case .array, .object: true
+    case .array, .object, .raw: true
     }
   }
 
-  static func parse(_ data: Data) -> JSONValue? {
-    try? JSONDecoder().decode(JSONValue.self, from: data)
+  /// Deep equality with the old `Dictionary` semantics (object key order
+  /// ignored). A `.raw` side equals another raw with the same bytes;
+  /// otherwise it's materialized and compared structurally.
+  static func == (lhs: JSONValue, rhs: JSONValue) -> Bool {
+    switch (lhs, rhs) {
+    case (.null, .null): return true
+    case let (.bool(a), .bool(b)): return a == b
+    case let (.number(a), .number(b)): return a == b
+    case let (.string(a), .string(b)): return a == b
+    case let (.array(a), .array(b)): return a == b
+    case let (.object(a), .object(b)): return a == b
+    case let (.raw(a), .raw(b)) where a === b || a.bytes == b.bytes: return true
+    case let (.raw(a), _): return a.materialize() == rhs
+    case let (_, .raw(b)): return lhs == b.materialize()
+    default: return false
+    }
   }
 
+  /// Strict `JSON.parse` equivalent (ordered keys, last duplicate wins);
+  /// nil for malformed input.
+  static func parse(_ data: Data) -> JSONValue? {
+    JSONParser.parse(data)
+  }
+
+  /// Compact `JSON.stringify` equivalent (insertion order, JS number
+  /// spelling, `/` unescaped, non-finite numbers → `null`). Always succeeds;
+  /// the optional return is kept for existing call sites.
   func encodedString() -> String? {
-    guard let data = try? JSONEncoder().encode(self) else { return nil }
-    return String(data: data, encoding: .utf8)
+    JSONWriter.stringify(self)
+  }
+
+  /// `JSON.stringify(x, null, 2)` equivalent; `sortedKeys` sorts object keys
+  /// at every level instead of keeping insertion order.
+  func prettyString(sortedKeys: Bool = false) -> String {
+    JSONWriter.pretty(self, sortedKeys: sortedKeys)
   }
 }

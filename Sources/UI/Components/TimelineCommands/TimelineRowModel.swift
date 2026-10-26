@@ -130,10 +130,10 @@ struct TimelineRowModel {
   /// Port of `LogCommand.getPreview`. String messages are sliced to 500
   /// chars (matching source exactly); object/array messages get a compact
   /// `{ key: value, … }` preview of the first 5 entries. Source picks "first
-  /// 5" by JS insertion order and truncates string values to 80 chars; our
-  /// `JSONValue.objectValue` is a plain `[String: JSONValue]` (insertion
-  /// order isn't tracked anywhere in this codebase), so keys are sorted for
-  /// determinism instead — a documented, unavoidable deviation.
+  /// 5" by JS insertion order and truncates string values to 80 chars; we
+  /// sort keys instead — a documented deviation. (`JSONObject` now keeps
+  /// insertion order, so this could follow source; that display change is
+  /// deliberately left for its own change.)
   private static func logPreview(_ message: JSONValue?) -> String {
     guard let message else { return "" }
     switch message {
@@ -149,14 +149,18 @@ struct TimelineRowModel {
       return compactObjectPreview(dict)
     case .array(let items):
       return compactArrayPreview(items)
+    case .raw(let r):
+      // `message` is on the lazy-parse spine, so this isn't reached in
+      // practice; stay correct anyway.
+      return logPreview(r.materialize())
     }
   }
 
-  private static func compactObjectPreview(_ dict: [String: JSONValue]) -> String {
-    let sortedKeys = dict.keys.sorted()
-    let shown = sortedKeys.prefix(5)
-    let parts = shown.map { key in "\(key): \(compactValueText(dict[key]!))" }
-    let suffix = sortedKeys.count > shown.count ? ", …" : ""
+  private static func compactObjectPreview(_ dict: JSONObject) -> String {
+    let sortedPairs = dict.sorted { $0.key < $1.key }
+    let shown = sortedPairs.prefix(5)
+    let parts = shown.map { "\($0.key): \(compactValueText($0.value))" }
+    let suffix = sortedPairs.count > shown.count ? ", …" : ""
     return "{ \(parts.joined(separator: ", "))\(suffix) }"
   }
 
@@ -173,7 +177,7 @@ struct TimelineRowModel {
     case .bool(let b): return b ? "true" : "false"
     case .number(let n): return numberText(n)
     case .string(let s): return "'\(s.count > 80 ? String(s.prefix(80)) + "…" : s)'"
-    case .array, .object: return "{...}"
+    case .array, .object, .raw: return "{...}"
     }
   }
 
@@ -257,7 +261,7 @@ struct TimelineRowModel {
 
   private static func isTruthyNonArray(_ v: JSONValue?) -> Bool {
     guard let v else { return false }
-    if case .array = v { return false }
+    if v.isArray { return false }
     return v.isTruthy
   }
 

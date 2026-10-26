@@ -39,6 +39,9 @@ struct TimelinePage: View {
   }
 
   var body: some View {
+    // Filter once per redraw: `filterSearch` stringifies every command's
+    // search paths, so reading `displayedCommands` twice doubled the cost.
+    let displayed = displayedCommands
     VStack(spacing: 0) {
       PageHeader(title: "Timeline", actions: headerActions)
 
@@ -46,12 +49,12 @@ struct TimelinePage: View {
         searchBar
       }
 
-      if displayedCommands.isEmpty {
+      if displayed.isEmpty {
         emptyState
       } else {
         ScrollView {
           LazyVStack(spacing: 0) {
-            ForEach(displayedCommands) { command in
+            ForEach(displayed) { command in
               TimelineCommandRow(command: command)
             }
           }
@@ -139,7 +142,7 @@ struct TimelinePage: View {
   /// selected connection to `~/Downloads/timeline-log-<epochMillis>.json`.
   private func exportLog() {
     let json = JSONValue.array(commands.map(Self.exportedJSON))
-    guard let data = try? JSONEncoder().encode(json) else { return }
+    let data = Data(JSONWriter.stringify(json).utf8)
 
     let downloadsDir = FileManager.default.homeDirectoryForCurrentUser
       .appendingPathComponent("Downloads")
@@ -159,7 +162,7 @@ struct TimelinePage: View {
   /// matching the field names in `reactotron-core-contract`'s `Command`
   /// interface, with `date` as an ISO-8601 string (`Date.prototype.toJSON`).
   private static func exportedJSON(_ command: Command) -> JSONValue {
-    var fields: [String: JSONValue] = [
+    var fields: JSONObject = [
       "type": .string(command.type),
       "connectionId": .number(Double(command.connectionId)),
       "messageId": .number(Double(command.messageId)),

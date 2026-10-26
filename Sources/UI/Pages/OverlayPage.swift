@@ -6,7 +6,7 @@ import UniformTypeIdentifiers
 /// `OverlayButton`, `OverlayLayoutType`, `OverlayMargins`, `OverlayOpacity`,
 /// `OverlayResizeMode`, `OverlayScale`, `Shared`).
 ///
-/// `overlayParams` is local view state — a `[String: JSONValue]` bag mirroring
+/// `overlayParams` is local view state — a `JSONObject` bag mirroring
 /// the source's `useOverlay()` hook's `useState<OverlayParams>({})`: it starts
 /// empty and each control's `onChange` merges its partial update into the
 /// accumulated object, then sends the WHOLE merged object as the `"overlay"`
@@ -34,7 +34,7 @@ import UniformTypeIdentifiers
 struct OverlayPage: View {
   @Environment(AppModel.self) private var model
 
-  @State private var overlayParams: [String: JSONValue] = [:]
+  @State private var overlayParams: JSONObject = [:]
   @State private var localURI: String?
   @State private var originalWidth = 0
   @State private var originalHeight = 0
@@ -292,7 +292,7 @@ struct OverlayPage: View {
 
   /// Port of `updateOverlayParams`: merges `partial` into the accumulated
   /// state, then sends the WHOLE merged object as the command payload.
-  private func updateOverlayParams(_ partial: [String: JSONValue]) {
+  private func updateOverlayParams(_ partial: JSONObject) {
     for (key, value) in partial { overlayParams[key] = value }
     model.sendCommand(type: "overlay", payload: .object(overlayParams))
   }
@@ -358,7 +358,7 @@ struct OverlayPage: View {
     let growToWindow = newLayoutType == .screen
     let currentResizeMode = overlayParams["resizeMode"]?.stringValue
     layoutType = newLayoutType
-    var partial: [String: JSONValue] = [
+    var partial: JSONObject = [
       "growToWindow": .bool(growToWindow),
       "width": .number(growToWindow ? Double(originalWidth) : Double(originalWidth) * scale),
       "height": .number(growToWindow ? Double(originalHeight) : Double(originalHeight) * scale),

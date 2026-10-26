@@ -16,6 +16,10 @@ struct ContentValueView: View {
   let value: JSONValue
   var treeLevel: Int = 0
 
+  /// Parses a lazy `.raw` value (e.g. an API response body) once while this
+  /// view exists — i.e. while its row is expanded.
+  @State private var box = MaterializedJSON()
+
   var body: some View {
     // Source first tries JSON.parse(value): a JSON string is expanded into the
     // structure it encodes before deciding table-vs-tree.
@@ -48,12 +52,15 @@ struct ContentValueView: View {
       } else {
         TreeView(value: resolved, level: treeLevel)
       }
+    case .raw:
+      TreeView(value: resolved, level: treeLevel)  // unreachable: resolved via `box`
     }
   }
 
   /// Mirrors source's `JSON.parse(value)` attempt: if `value` is a string that
   /// parses to a JSON object/array, use the parsed structure.
   private var resolvedValue: JSONValue {
+    let value = box.resolve(self.value)
     if case .string(let s) = value,
        let parsed = JSONValue.parse(Data(s.utf8)),
        parsed.objectValue != nil || parsed.arrayValue != nil {
@@ -67,18 +74,19 @@ struct ContentValueView: View {
   private func isShallow(_ v: JSONValue) -> Bool {
     switch v {
     case .array(let items):
-      return !items.contains { $0.objectValue != nil || $0.arrayValue != nil }
+      return !items.contains { $0.isObjectOrArray }
     case .object(let dict):
-      return !dict.values.contains { $0.objectValue != nil || $0.arrayValue != nil }
+      return !dict.values.contains { $0.isObjectOrArray }
+    case .raw:
+      return false  // a lazy subtree is always a large container
     default:
       return true
     }
   }
 
-  private func arrayAsObject(_ v: JSONValue) -> [String: JSONValue] {
+  private func arrayAsObject(_ v: JSONValue) -> JSONObject {
     guard case .array(let items) = v else { return [:] }
-    var out: [String: JSONValue] = [:]
-    for (i, item) in items.enumerated() { out[String(i)] = item }
-    return out
+    // Indices are unique keys, in index order (JS `Object.keys` on an array).
+    return JSONObject(uniqueKeysWithValues: items.enumerated().map { (String($0.offset), $0.element) })
   }
 }

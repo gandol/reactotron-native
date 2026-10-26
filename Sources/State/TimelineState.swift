@@ -98,22 +98,24 @@ private func buildTimelineSearchRegex(_ search: String) -> NSRegularExpression? 
   return try? NSRegularExpression(pattern: escaped, options: [.caseInsensitive])
 }
 
-/// Stand-in for `JSON.stringify` in `filterSearch`'s `matching`. Unlike the
-/// shared `JSONValue.encodedString()` (plain `JSONEncoder`, used on the wire),
-/// this leaves `/` unescaped, so a search like `/users` still hits an
-/// object-valued `payload.message` such as `{"path":"/users/1"}`.
-/// Residual: `JSONValue.object` is an unordered dictionary, so key order can
-/// differ from `JSON.stringify`'s insertion order — only a search spanning two
-/// adjacent keys could ever match differently.
-private let timelineSearchEncoder: JSONEncoder = {
-  let encoder = JSONEncoder()
-  encoder.outputFormatting = [.withoutEscapingSlashes]
-  return encoder
-}()
-
 /// Port of the inline `matching(value)` closure in `filterSearch`: falsy values
 /// (JS truthiness — `JSONValue.isTruthy` mirrors this exactly) never match;
 /// strings are tested directly; anything else is JSON-serialized first.
+///
+/// `JSON.stringify` here is `JSONWriter.stringify`: insertion key order (the
+/// parser keeps wire order), JS number spelling, `/` left unescaped — so a
+/// search like `/users` hits an object-valued `payload.message` such as
+/// `{"path":"/users/1"}`, and a search spanning two adjacent keys
+/// (`"b":2,"a"`) matches exactly when it would upstream.
+///
+/// Lazy `.raw` payload subtrees (`RawJSON`) are searched without parsing:
+/// on these paths the wire parser only leaves a subtree raw when its bytes
+/// are canonical and need no repair — then they *are*
+/// `JSON.stringify(JSON.parse(bytes))` (`LazyJSONPolicy`); anything else
+/// (pretty-printed sender, `\/` escapes, non-JS number spelling, repair
+/// markers, duplicate keys) is parsed at receive time, so the text is the
+/// same either way. Residual, only reachable by a non-JS client:
+/// integer-like keys keep wire order (JS would hoist them).
 private func timelineSearchMatches(_ value: JSONValue?, regex: NSRegularExpression) -> Bool {
   guard let value, value.isTruthy else { return false }
 
@@ -121,10 +123,7 @@ private func timelineSearchMatches(_ value: JSONValue?, regex: NSRegularExpressi
   if case .string(let s) = value {
     text = s
   } else {
-    guard let data = try? timelineSearchEncoder.encode(value),
-      let stringified = String(data: data, encoding: .utf8)
-    else { return false }
-    text = stringified
+    text = JSONWriter.stringify(value)
   }
 
   let range = NSRange(text.startIndex..., in: text)

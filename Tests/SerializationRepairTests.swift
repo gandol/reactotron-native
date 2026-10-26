@@ -23,13 +23,13 @@ final class SerializationRepairTests: XCTestCase {
   }
 
   func testNamedFunctionSentinelStripsTildes() {
-    let out = SerializationRepair.repair(.object(["f": .string("~~~ fetchData() ~~~")] as [String: JSONValue]))
+    let out = SerializationRepair.repair(.object(["f": .string("~~~ fetchData() ~~~")] as JSONObject))
     XCTAssertEqual(out["f"], .string(" fetchData() "))
   }
 
   func testRecursesIntoArraysAndObjects() {
     let out = SerializationRepair.repair(
-      .object(["a": .array([.string("~~~ null ~~~"), .object(["b": .string("~~~ zero ~~~")] as [String: JSONValue])] as [JSONValue])] as [String: JSONValue]))
+      .object(["a": .array([.string("~~~ null ~~~"), .object(["b": .string("~~~ zero ~~~")] as JSONObject)] as [JSONValue])] as JSONObject))
     XCTAssertEqual(out["a"]?[0], .null)
     XCTAssertEqual(out["a"]?[1]?["b"], .number(0))
   }
@@ -42,7 +42,7 @@ final class SerializationRepairTests: XCTestCase {
     let out = SerializationRepair.repair(.object([
       "nan": .string("~~~ NaN ~~~"), "inf": .string("~~~ Infinity ~~~"),
       "ninf": .string("~~~ -Infinity ~~~"),
-    ] as [String: JSONValue]))
+    ] as JSONObject))
     XCTAssertTrue(out["nan"]?.numberValue?.isNaN == true)
     XCTAssertEqual(out["inf"], .number(.infinity))
     XCTAssertEqual(out["ninf"], .number(-.infinity))

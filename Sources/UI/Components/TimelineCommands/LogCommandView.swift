@@ -20,7 +20,6 @@ struct LogCommandView: View {
     // even if its value isn't a proper frame array (a raw `Error.stack`
     // string is a valid `LogPayload.stack` per reactotron-core-contract).
     let hasStackKey = obj?["stack"] != nil
-    let stackFrames = obj?["stack"]?.arrayValue ?? []
 
     BaseCommandView(
       title: model.title,
@@ -37,8 +36,14 @@ struct LogCommandView: View {
       VStack(alignment: .leading, spacing: 10) {
         if hasStackKey {
           errorMessageBox(message)
-          if !stackFrames.isEmpty {
-            stackTable(stackFrames)
+          // Resolved inside the expand closure, once per expansion: a large
+          // `stack` is a lazy `.raw` subtree, and neither collapsed rows nor
+          // redraws of an open one may parse it again.
+          MaterializedView(value: obj?["stack"] ?? .null) { stack in
+            let stackFrames = stack.arrayValue ?? []
+            if !stackFrames.isEmpty {
+              stackTable(stackFrames)
+            }
           }
         } else {
           messageBody(message)

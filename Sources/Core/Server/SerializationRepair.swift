@@ -18,6 +18,9 @@ enum SerializationRepair {
     switch value {
     case .object(let o): .object(o.mapValues(repairInner))
     case .array(let a): .array(a.map(repairInner))
+    // Lazy subtree: its repair is deferred to `RawJSON.materialize()`
+    // (flagged by the wire parser's skip-scan), so it's left as-is here.
+    case .raw: value
     default: value  // top-level non-object untouched, per JS early return
     }
   }
@@ -26,6 +29,7 @@ enum SerializationRepair {
     switch value {
     case .object(let o): return .object(o.mapValues(repairInner))
     case .array(let a): return .array(a.map(repairInner))
+    case .raw: return value  // deferred to `RawJSON.materialize()`
     case .string(let s):
       if let replacement = replacements[s.lowercased()] { return replacement }
       if s.count > 9, s.hasPrefix("~~~ "), s.hasSuffix(" ~~~") {

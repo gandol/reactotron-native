@@ -1,12 +1,51 @@
 import Foundation
 
-struct WireMessage: Decodable {
+/// The incoming frame envelope (`reactotron-core-server.ts`'s
+/// `const { type, important, payload, deltaTime = 0, date } = JSON.parse(incoming)`,
+/// plus the `diff` sibling some clients send).
+struct WireMessage {
   let type: String
   let payload: JSONValue?
   let important: JSONValue?
   let deltaTime: Double?
   let date: String?
   let diff: JSONValue?
+
+  /// Parses one frame with `JSONParser` (ordered keys, so payload objects
+  /// keep the client's key order). Keeps the acceptance rules the former
+  /// synthesized `Decodable` had, so exactly the same frames are dropped:
+  /// the top level must be an object with a string `type`; `deltaTime`, when
+  /// present and non-null, must be a number and `date` a string; `payload`,
+  /// `important` and `diff` take any JSON, with `null` read as absent;
+  /// unknown keys are ignored; a duplicate envelope key takes the last value.
+  ///
+  /// With a `lazy` policy, large subtrees of `payload` / `diff` stay as
+  /// `.raw` bytes (`LazyJSONPolicy`); acceptance is unaffected.
+  init?(data: Data, lazy: LazyJSONPolicy? = nil) {
+    guard case .object(let envelope)? = JSONParser.parse(data, lazy: lazy),
+      case .string(let type)? = envelope["type"]
+    else { return nil }
+
+    switch envelope["deltaTime"] {
+    case nil, .null?: deltaTime = nil
+    case .number(let n)?: deltaTime = n
+    default: return nil
+    }
+    switch envelope["date"] {
+    case nil, .null?: date = nil
+    case .string(let s)?: date = s
+    default: return nil
+    }
+
+    func nonNull(_ v: JSONValue?) -> JSONValue? {
+      if case .null? = v { return nil }
+      return v
+    }
+    self.type = type
+    payload = nonNull(envelope["payload"])
+    important = nonNull(envelope["important"])
+    diff = nonNull(envelope["diff"])
+  }
 }
 
 struct Command: Identifiable, Sendable, Equatable {

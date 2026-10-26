@@ -16,11 +16,9 @@ struct SagaTaskCompleteCommandView: View {
   var body: some View {
     let model = TimelineRowModel.resolve(command)
     let obj = command.payload.objectValue
-    let children = obj?["children"]?.arrayValue ?? []
     let duration = obj?["duration"]?.numberValue.map { Int($0) } ?? 0
     let triggerType = obj?["triggerType"]?.stringValue ?? ""
     let description = obj?["description"]?.stringValue
-    let effectWord = children.count == 1 ? "Effect" : "Effects"
 
     BaseCommandView(
       title: model.title,
@@ -33,21 +31,28 @@ struct SagaTaskCompleteCommandView: View {
         }
       ]
     ) {
-      VStack(alignment: .leading, spacing: 6) {
-        HStack {
-          Text((description?.isEmpty == false) ? description! : triggerType)
-            .foregroundStyle(Theme.tag)
-          Text("\(children.count) \(effectWord)")
-            .foregroundStyle(Theme.foreground)
-          Spacer()
-          Text("\(duration)ms").foregroundStyle(Theme.foregroundDark)
-        }
-        .font(Theme.font(12))
-        .padding(.bottom, 4)
-        .overlay(alignment: .bottom) { Rectangle().fill(Theme.highlight).frame(height: 1) }
+      // Resolved inside the expand closure, once per expansion: a large
+      // `children` array is a lazy `.raw` subtree, and neither collapsed rows
+      // nor redraws of an open one may parse it again.
+      MaterializedView(value: obj?["children"] ?? .null) { childrenValue in
+        let children = childrenValue.arrayValue ?? []
+        let effectWord = children.count == 1 ? "Effect" : "Effects"
+        VStack(alignment: .leading, spacing: 6) {
+          HStack {
+            Text((description?.isEmpty == false) ? description! : triggerType)
+              .foregroundStyle(Theme.tag)
+            Text("\(children.count) \(effectWord)")
+              .foregroundStyle(Theme.foreground)
+            Spacer()
+            Text("\(duration)ms").foregroundStyle(Theme.foregroundDark)
+          }
+          .font(Theme.font(12))
+          .padding(.bottom, 4)
+          .overlay(alignment: .bottom) { Rectangle().fill(Theme.highlight).frame(height: 1) }
 
-        ForEach(Array(children.enumerated()), id: \.offset) { _, child in
-          effectRow(child, isDetailsOpen: isDetailsOpen)
+          ForEach(Array(children.enumerated()), id: \.offset) { _, child in
+            effectRow(child, isDetailsOpen: isDetailsOpen)
+          }
         }
       }
     }

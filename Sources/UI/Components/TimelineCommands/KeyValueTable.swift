@@ -10,17 +10,18 @@ import SwiftUI
 /// `ValueContainer`'s per-type color exactly (null/undefined -> tag color,
 /// bool/number -> constant color, string/default -> foreground).
 ///
-/// - Note: `JSONValue.objectValue` is a plain `[String: JSONValue]` — this
-///   codebase does not track JS's insertion order anywhere — so keys are
-///   sorted alphabetically for deterministic output instead. Source shows
-///   keys in `Object.keys` (insertion) order.
+/// - Note: keys are sorted alphabetically. Source shows keys in
+///   `Object.keys` (insertion) order; `JSONObject` now keeps that order, but
+///   switching the displayed order is a separate behavior change that hasn't
+///   been made yet.
 struct KeyValueTable: View {
-  let object: [String: JSONValue]
+  let object: JSONObject
 
   var body: some View {
     VStack(alignment: .leading, spacing: 2) {
-      ForEach(object.keys.sorted(), id: \.self) { key in
-        row(key: key, value: object[key] ?? .null)
+      // Sorted pairs, not sorted keys + lookup (lookup is a linear scan).
+      ForEach(object.sorted { $0.key < $1.key }, id: \.key) { pair in
+        row(key: pair.key, value: pair.value)
       }
     }
   }
@@ -44,7 +45,7 @@ struct KeyValueTable: View {
     case .bool(let b): return b ? "true" : "false"
     case .number(let n): return n.truncatingRemainder(dividingBy: 1) == 0 ? String(Int(n)) : String(n)
     case .string(let s): return s
-    case .array, .object: return v.encodedString() ?? ""
+    case .array, .object, .raw: return v.encodedString() ?? ""
     }
   }
 
@@ -52,7 +53,7 @@ struct KeyValueTable: View {
     switch v {
     case .null: return Theme.tag
     case .bool, .number: return Theme.constant
-    case .string, .array, .object: return Theme.foreground
+    case .string, .array, .object, .raw: return Theme.foreground
     }
   }
 }

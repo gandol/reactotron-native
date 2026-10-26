@@ -235,4 +235,28 @@ final class FilterCommandsTests: XCTestCase {
     )
     XCTAssertEqual(filterSearch([command], search: "/users").map(\.messageId), [1])
   }
+
+  /// `JSON.stringify` writes keys in insertion order, so a search spanning two
+  /// adjacent keys matches only in the order the client sent them.
+  func testSearchSpanningAdjacentKeysFollowsWireOrder() throws {
+    let message = try XCTUnwrap(JSONValue.parse(Data(#"{"b":2,"a":1}"#.utf8)))
+    let command = makeCommand(type: "log", messageId: 1, payload: .object(["message": message]))
+    XCTAssertEqual(filterSearch([command], search: #""b":2,"a""#).map(\.messageId), [1])
+    XCTAssertEqual(filterSearch([command], search: #""a":1,"b""#).map(\.messageId), [])
+
+    let literal = makeCommand(
+      type: "log", messageId: 2,
+      payload: .object(["message": .object(["y": .string("1"), "x": .string("2")])]))
+    XCTAssertEqual(filterSearch([literal], search: #""y":"1","x""#).map(\.messageId), [2])
+  }
+
+  /// Numbers are spelled like JS `Number::toString` (`1e-7`, not `1e-07`).
+  func testSearchUsesJSNumberSpelling() {
+    let command = makeCommand(
+      type: "log", messageId: 1,
+      payload: .object(["message": .object(["x": .number(1e-7), "big": .number(1e16)])]))
+    XCTAssertEqual(filterSearch([command], search: #""x":1e-7"#).map(\.messageId), [1])
+    XCTAssertEqual(filterSearch([command], search: "10000000000000000").map(\.messageId), [1])
+    XCTAssertEqual(filterSearch([command], search: "1e-07").map(\.messageId), [])
+  }
 }

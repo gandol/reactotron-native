@@ -31,8 +31,8 @@ func apiRequestToCurl(_ payload: JSONValue) -> String {
     output.append("curl -X \(method ?? "") ")
   }
   // Object key order in JS is insertion order; we sort for determinism.
-  for header in headers.keys.sorted() {
-    let v = headers[header].flatMap { $0.stringValue } ?? stringifyScalar(headers[header])
+  for (header, value) in headers.sorted(by: { $0.key < $1.key }) {
+    let v = value.stringValue ?? stringifyScalar(value)
     output.append(" -H \"\(header):\(v)\"")
   }
   output.append(" \(url)")
@@ -54,10 +54,10 @@ func apiRequestToCurl(_ payload: JSONValue) -> String {
   return output.joined()
 }
 
-/// Renders a `[String: JSONValue]` header/param table as a fixed-width markdown
-/// table (port of the private `tableToMarkdown`).
-private func tableToMarkdown(_ table: [String: JSONValue]) -> String {
-  let entries = table.keys.sorted().map { ($0, table[$0].flatMap { $0.stringValue } ?? stringifyScalar(table[$0])) }
+/// Renders a header/param object as a fixed-width markdown table (port of
+/// the private `tableToMarkdown`). Keys sorted, like `apiRequestToCurl`.
+private func tableToMarkdown(_ table: JSONObject) -> String {
+  let entries = table.sorted { $0.key < $1.key }.map { ($0.key, $0.value.stringValue ?? stringifyScalar($0.value)) }
   var keyLength = 0
   var valueLength = 0
   for (k, v) in entries {
@@ -73,11 +73,10 @@ private func tableToMarkdown(_ table: [String: JSONValue]) -> String {
   return lines.joined(separator: "\n")
 }
 
-/// Pretty (2-space) JSON for a JSONValue, matching `JSON.stringify(x, null, 2)`.
+/// Pretty (2-space) JSON for a JSONValue, matching `JSON.stringify(x, null, 2)`
+/// except that keys stay sorted, as they were before `JSONWriter`.
 private func pretty2(_ value: JSONValue) -> String {
-  guard let data = try? JSONEncoder.prettyTwoSpace.encode(value),
-        let s = String(data: data, encoding: .utf8) else { return "" }
-  return s
+  JSONWriter.pretty(value, sortedKeys: true)
 }
 
 /// Port of `apiToMarkdown(payload)`.
@@ -173,10 +172,3 @@ private func stringifyScalar(_ value: JSONValue?) -> String {
   }
 }
 
-private extension JSONEncoder {
-  static let prettyTwoSpace: JSONEncoder = {
-    let e = JSONEncoder()
-    e.outputFormatting = [.prettyPrinted, .sortedKeys]
-    return e
-  }()
-}

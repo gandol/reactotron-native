@@ -21,7 +21,7 @@ final class SessionStoreTests: XCTestCase {
     id: Int, command: String, title: String? = nil, description: String? = nil,
     args: [(name: String, type: String)] = []
   ) -> JSONValue {
-    var obj: [String: JSONValue] = ["id": .number(Double(id)), "command": .string(command)]
+    var obj: JSONObject = ["id": .number(Double(id)), "command": .string(command)]
     if let title { obj["title"] = .string(title) }
     if let description { obj["description"] = .string(description) }
     if !args.isEmpty {

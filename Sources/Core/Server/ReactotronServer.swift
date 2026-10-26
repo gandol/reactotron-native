@@ -202,7 +202,12 @@ final class ReactotronServer: @unchecked Sendable {
   // MARK: - Message processing
 
   private func handleMessage(data: Data, connectionId id: Int) {
-    guard let message = try? JSONDecoder().decode(WireMessage.self, from: data) else { return }
+    // Large payload subtrees stay as raw bytes (`LazyJSONPolicy`) — a
+    // memory optimization; their `repairSerialization` pass is deferred to
+    // `RawJSON.materialize()`. The payload root itself is always parsed, so
+    // the `case .object(var obj)` edits below (intro `address`, backup
+    // `name`) always see a real object.
+    guard let message = WireMessage(data: data, lazy: .commandPayload) else { return }
 
     let payload = SerializationRepair.repair(message.payload ?? .null)
     let diff = message.diff.map { SerializationRepair.repair($0) }

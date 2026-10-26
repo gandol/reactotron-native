@@ -133,6 +133,41 @@ final class ReactotronServerTests: XCTestCase {
     client.close()
   }
 
+  /// JS adds `address` to the parsed intro object, so it lands after the
+  /// client's own keys, which keep their wire order.
+  func testIntroPayloadKeepsWireOrderWithAddressLast() async throws {
+    await start()
+    let got = expectation(description: "intro command")
+    let keys = Box<[String]>([])
+    server.events.command = { cmd in
+      guard cmd.type == "client.intro" else { return }
+      keys.value = cmd.payload.objectValue?.keys ?? []
+      got.fulfill()
+    }
+    let client = TestClient(port: port)
+    try await client.send(#"{"type":"client.intro","payload":{"name":"T","clientId":"ordered","platform":"ios"}}"#)
+    await fulfillment(of: [got], timeout: 5)
+    XCTAssertEqual(keys.value, ["name", "clientId", "platform", "address"])
+    client.close()
+  }
+
+  /// Sent frames are `JSON.stringify({ type, payload })`: `type` first, and
+  /// still valid JSON for the client to parse.
+  func testSentFrameIsOrderedJSON() async throws {
+    await start()
+    let c1 = TestClient(port: port)
+    try await c1.send(#"{"type":"client.intro","payload":{"clientId":"frame"}}"#)
+    try await Task.sleep(for: .milliseconds(300))
+    server.send(
+      type: "custom", payload: .object(["command": .string("go/home"), "args": .object(["n": .number(1e-7)])]),
+      clientId: "frame")
+    var msg = try await c1.receive()
+    while !msg.contains("\"custom\"") { msg = try await c1.receive() }
+    XCTAssertEqual(msg, #"{"type":"custom","payload":{"command":"go/home","args":{"n":1e-7}}}"#)
+    XCTAssertNotNil(JSONValue.parse(Data(msg.utf8)))
+    c1.close()
+  }
+
   func testDuplicateClientIdClosesOldSocket() async throws {
     await start()
     let c1 = TestClient(port: port)
