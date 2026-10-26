@@ -124,6 +124,7 @@ struct TimelinePage: View {
       } label: {
         Icon(.faTimes, size: 24, color: Theme.foregroundLight)
           .padding(10)
+          .contentShape(Rectangle())
       }
       .buttonStyle(.plain)
     }

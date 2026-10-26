@@ -58,18 +58,23 @@ struct PageHeader: View {
 
         Spacer(minLength: 0)
 
-        HStack(spacing: 8) {
+        HStack(spacing: 0) {
           ForEach(Array(actions.enumerated()), id: \.offset) { _, action in
             Button {
               action.onTap()
             } label: {
+              // Padding + contentShape widens the hit area past the 18pt glyph
+              // without changing the visual spacing (4+4 = the old 8pt gap).
               Icon(action.icon, size: 18, color: Theme.foregroundLight)
+                .padding(.horizontal, 4)
+                .padding(.vertical, 12)
+                .contentShape(Rectangle())
                 .help(action.tip)
             }
             .buttonStyle(.plain)
           }
         }
-        .padding(.trailing, 20)
+        .padding(.trailing, 16)
       }
       .frame(height: 70)
 
@@ -103,6 +108,7 @@ struct PageHeader: View {
       }
       .padding(.horizontal, 10)
       .padding(.vertical, 15)
+      .contentShape(Rectangle())
     }
     .buttonStyle(.plain)
   }

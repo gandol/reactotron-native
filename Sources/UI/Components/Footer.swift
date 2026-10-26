@@ -122,6 +122,7 @@ struct Footer: View {
         } label: {
           Icon(.mdSettings, size: 14, color: Theme.foregroundDark)
             .padding(4)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
       }

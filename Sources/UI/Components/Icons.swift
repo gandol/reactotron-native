@@ -637,5 +637,8 @@ struct Icon: View {
       .transformEffect(CGAffineTransform(scaleX: scale, y: scale))
       .frame(width: icon.width * scale, height: icon.height * scale)
       .frame(width: size, height: size)
+      // A filled Path only hit-tests its inked pixels, so in a `.plain` Button
+      // clicks between the strokes fall through. Make the full box tappable.
+      .contentShape(Rectangle())
   }
 }
