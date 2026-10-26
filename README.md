@@ -121,8 +121,6 @@ the safety net for what leaves the process, not an access-control layer on who c
 
 Ported honestly, not silently patched over:
 
-- **Timeline `isReversed` is not persisted.** The Electron app saves this to
-  `localStorage.ReactotronTimelineReversedOrder`; this app resets to the default order on relaunch.
 - **`subscriptionValues` is a single global list**, not scoped per selected connection. With more
   than one simultaneous client, subscription values from all clients are not distinguished the way
   the Electron app (which scopes to `selectedConnection.commands`) does.

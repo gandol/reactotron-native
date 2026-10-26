@@ -170,6 +170,62 @@ final class McpServerTests: XCTestCase {
     XCTAssertFalse(preview.contains("hunter2"), "raw secret leaked in: \(preview)")
   }
 
+  // MARK: - timeline_by_type list / complete
+
+  private func bufferTypes(_ types: [String]) async {
+    let m = mcp!
+    let commands = types.enumerated().map { i, type in
+      Command(
+        type: type, connectionId: 1, messageId: i + 1, date: Date(), deltaTime: 0,
+        important: false, payload: .object([:]), clientId: nil, diff: nil
+      )
+    }
+    await MainActor.run { commands.forEach(m.buffer) }
+  }
+
+  func testResourcesListAppendsPerTypeTimelineEntries() async throws {
+    await bufferTypes(["log", "api.response", "log"])
+    let (_, json) = try await postMcp(rpc(method: "resources/list"))
+    let resources = json["result"]?["resources"]?.arrayValue ?? []
+    XCTAssertEqual(resources.count, 5)
+    XCTAssertEqual(resources.suffix(2).compactMap { $0["name"]?.stringValue }, ["timeline:log", "timeline:api.response"])
+    XCTAssertEqual(resources.last?["uri"]?.stringValue, "reactotron://timeline/api.response")
+    XCTAssertEqual(resources.last?["mimeType"]?.stringValue, "application/json")
+  }
+
+  func testCompletionCompleteFiltersTypesByPrefix() async throws {
+    await bufferTypes(["state.values.response", "log", "state.keys.response", "log"])
+    let initialize = try await postMcp(rpc(method: "initialize", params: .object([
+      "protocolVersion": .string("2025-06-18"),
+    ])))
+    XCTAssertNotNil(initialize.json["result"]?["capabilities"]?["completions"])
+
+    func complete(uri: String, name: String = "type", value: String) async throws -> JSONValue {
+      try await postMcp(rpc(method: "completion/complete", params: .object([
+        "ref": .object(["type": .string("ref/resource"), "uri": .string(uri)]),
+        "argument": .object(["name": .string(name), "value": .string(value)]),
+      ]))).json
+    }
+
+    let hit = try await complete(uri: "reactotron://timeline/{type}", value: "state.")
+    XCTAssertEqual(
+      hit["result"]?["completion"]?["values"]?.arrayValue?.compactMap(\.stringValue),
+      ["state.values.response", "state.keys.response"]
+    )
+    XCTAssertEqual(hit["result"]?["completion"]?["total"]?.numberValue, 2)
+    XCTAssertEqual(hit["result"]?["completion"]?["hasMore"]?.boolValue, false)
+
+    // Case-sensitive prefix, like `startsWith`.
+    let miss = try await complete(uri: "reactotron://timeline/{type}", value: "Log")
+    XCTAssertEqual(miss["result"]?["completion"]?["values"]?.arrayValue?.count, 0)
+
+    let staticRef = try await complete(uri: "reactotron://timeline", value: "")
+    XCTAssertEqual(staticRef["result"]?["completion"]?["values"]?.arrayValue?.count, 0)
+
+    let unknown = try await complete(uri: "reactotron://nope/{x}", value: "")
+    XCTAssertEqual(unknown["error"]?["code"]?.numberValue, -32602)
+  }
+
   // MARK: - JSON-RPC error paths
 
   func testUnknownMethodReturnsMethodNotFound() async throws {

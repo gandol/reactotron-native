@@ -17,9 +17,17 @@ import AppKit
 /// - The search bar's label reads "Search" (not "Filter:") per the actual
 ///   `SearchLabel` JSX — the task brief said "Filter:" but the source disagrees;
 ///   source governs.
+/// - The search field is debounced 300ms (port of `useDebouncedSearchInput`):
+///   `searchText` is the field's local text, updated on every keystroke, and
+///   `TimelineState.search` (which drives `filterCommands`) only receives it
+///   after 300ms without typing (lodash `debounce`'s trailing call).
 struct TimelinePage: View {
   @Environment(AppModel.self) private var model
   @FocusState private var searchFieldFocused: Bool
+  /// `useDebouncedSearchInput`'s local `searchString`, seeded from the
+  /// committed `search` on appear (the source's `useState(initialValue)`).
+  @State private var searchText = ""
+  @State private var searchDebounce: Task<Void, Never>?
 
   private var commands: [Command] { model.session.selectedConnection?.commands ?? [] }
 
@@ -50,6 +58,18 @@ struct TimelinePage: View {
         }
       }
     }
+    .onAppear { searchText = model.timeline.search }
+    .onChange(of: searchText) { _, newValue in scheduleSearchCommit(newValue) }
+  }
+
+  /// Trailing-edge 300ms debounce: each keystroke cancels the pending commit.
+  private func scheduleSearchCommit(_ value: String) {
+    searchDebounce?.cancel()
+    searchDebounce = Task { @MainActor in
+      try? await Task.sleep(for: .milliseconds(300))
+      guard !Task.isCancelled, model.timeline.search != value else { return }
+      model.timeline.search = value
+    }
   }
 
   // MARK: - Header
@@ -79,7 +99,7 @@ struct TimelinePage: View {
         .foregroundStyle(Theme.foregroundDark)
         .padding(.horizontal, 10)
 
-      TextField("", text: $timelineState.search)
+      TextField("", text: $searchText)
         .textFieldStyle(.plain)
         .font(Theme.font(14))
         .foregroundStyle(Theme.foregroundDark)
@@ -89,9 +109,16 @@ struct TimelinePage: View {
         .onAppear { searchFieldFocused = true }
 
       Button {
+        // Like the source, this checks the committed (debounced) `search`, not
+        // the field text. Small divergence: the source's `setSearch("")` leaves
+        // its local `searchString` (and any pending debounced call) alone, so
+        // stale text stays in the box; here the field and pending commit are
+        // cleared too so the box matches the cleared filter.
         if timelineState.search.isEmpty {
           timelineState.isSearchOpen = false
         } else {
+          searchDebounce?.cancel()
+          searchText = ""
           timelineState.search = ""
         }
       } label: {

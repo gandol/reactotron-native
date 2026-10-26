@@ -203,6 +203,7 @@ final class McpCore: @unchecked Sendable {
     case "resources/list": outcome = .result(resourcesList())
     case "resources/templates/list": outcome = .result(resourcesTemplatesList())
     case "resources/read": outcome = resourcesRead(params)
+    case "completion/complete": outcome = completionComplete(params)
     default: outcome = .failure(-32601, "Method not found")
     }
 
@@ -243,7 +244,9 @@ final class McpCore: @unchecked Sendable {
     // serverInfo mirrors mcp-server.ts's McpServer constructor.
     return .object([
       "protocolVersion": .string(protocolVersion),
-      "capabilities": .object(["tools": .object([:]), "resources": .object([:])]),
+      // `completions` is advertised because `timeline_by_type` declares a
+      // `complete` callback (the SDK's `setCompletionRequestHandler`).
+      "capabilities": .object(["tools": .object([:]), "resources": .object([:]), "completions": .object([:])]),
       "serverInfo": .object(["name": .string("reactotron"), "version": .string("0.1.0")]),
     ])
   }
@@ -380,6 +383,8 @@ final class McpCore: @unchecked Sendable {
 
   /// Port of tools.ts `resolveClientId`.
   private func resolveClientId(_ requested: String?) -> (clientId: String?, error: String?) {
+    // JS truthiness: tools.ts's `!requestedClientId` / `||` treat "" as unspecified.
+    let requested = requested?.isEmpty == false ? requested : nil
     guard let server = currentServer() else { return (nil, "No apps connected to Reactotron.") }
     let connections = server.connectionList
     if connections.isEmpty {
@@ -591,8 +596,18 @@ final class McpCore: @unchecked Sendable {
 
   // MARK: - resources
 
+  /// The fixed resources followed by one entry per buffered command type —
+  /// the SDK's `resources/list` handler appends each template's `list`
+  /// callback results (`resources.ts`'s `timeline_by_type` `list`), merged over
+  /// the template metadata (`{ ...template.metadata, ...resource }`).
   private func resourcesList() -> JSONValue {
-    .object(["resources": .array([
+    let perType = distinctBufferedTypes().map { type in
+      resourceDescriptor(
+        name: "timeline:\(type)", uri: "reactotron://timeline/\(type)",
+        description: Self.timelineByTypeDescription
+      )
+    }
+    return .object(["resources": .array([
       resourceDescriptor(
         name: "timeline", uri: "reactotron://timeline",
         description: "Read this first to understand what's happening in the app. Returns summarized debug events (type, timestamp, and a short preview) newest-first. Payloads are stripped to keep the response small. Use the timeline_by_type resource template to get full event data filtered by type (e.g. reactotron://timeline/api.response)."
@@ -605,15 +620,61 @@ final class McpCore: @unchecked Sendable {
         name: "network", uri: "reactotron://network/log",
         description: "Captured HTTP requests and responses. Each entry shows URL, method, status, duration, headers, and previews of request/response bodies (truncated to 500 chars). Use timeline_by_type with type 'api.response' for full request/response data."
       ),
-    ])])
+    ] + perType)])
+  }
+
+  private static let timelineByTypeURITemplate = "reactotron://timeline/{type}"
+  private static let timelineByTypeDescription = "Timeline events filtered by command type, with full payloads. Available types depend on what the app has sent (e.g. api.response, log, state.values.response, benchmark.report). Read the timeline resource first to see which types are present."
+  private static let staticResourceURIs: Set<String> = [
+    "reactotron://timeline", "reactotron://state/current", "reactotron://network/log",
+  ]
+
+  /// `[...new Set(commandBuffer.map((c) => c.type))]` — distinct types in
+  /// first-seen order.
+  private func distinctBufferedTypes() -> [String] {
+    var seen = Set<String>()
+    return snapshot().map(\.type).filter { seen.insert($0).inserted }
+  }
+
+  /// Port of the SDK's `handleResourceCompletion` for `timeline_by_type`'s
+  /// `complete.type` callback (`resources.ts`): case-sensitive prefix match
+  /// over the distinct buffered types, capped at 100 (`createCompletionResult`).
+  /// A static resource URI or an argument with no completer yields the SDK's
+  /// `EMPTY_COMPLETION_RESULT`; any other ref is "Resource template … not found".
+  private func completionComplete(_ params: [String: JSONValue]) -> Outcome {
+    let empty: JSONValue = .object(["completion": .object(["values": .array([]), "hasMore": .bool(false)])])
+    guard let ref = params["ref"]?.objectValue,
+      let argument = params["argument"]?.objectValue,
+      let name = argument["name"]?.stringValue,
+      let value = argument["value"]?.stringValue
+    else { return .failure(-32602, "Invalid params") }
+    guard ref["type"]?.stringValue == "ref/resource" else {
+      // `ref/prompt`: this server registers no prompts.
+      if ref["type"]?.stringValue == "ref/prompt" {
+        return .failure(-32602, "Prompt \(ref["name"]?.stringValue ?? "") not found")
+      }
+      return .failure(-32602, "Invalid completion reference")
+    }
+    let uri = ref["uri"]?.stringValue ?? ""
+    guard uri == Self.timelineByTypeURITemplate else {
+      if Self.staticResourceURIs.contains(uri) { return .result(empty) }
+      return .failure(-32602, "Resource template \(uri) not found")
+    }
+    guard name == "type" else { return .result(empty) }
+    let matches = distinctBufferedTypes().filter { $0.hasPrefix(value) }
+    return .result(.object(["completion": .object([
+      "values": .array(matches.prefix(100).map(JSONValue.string)),
+      "total": .number(Double(matches.count)),
+      "hasMore": .bool(matches.count > 100),
+    ])]))
   }
 
   private func resourcesTemplatesList() -> JSONValue {
     .object(["resourceTemplates": .array([
       .object([
-        "uriTemplate": .string("reactotron://timeline/{type}"),
+        "uriTemplate": .string(Self.timelineByTypeURITemplate),
         "name": .string("timeline_by_type"),
-        "description": .string("Timeline events filtered by command type, with full payloads. Available types depend on what the app has sent (e.g. api.response, log, state.values.response, benchmark.report). Read the timeline resource first to see which types are present."),
+        "description": .string(Self.timelineByTypeDescription),
         "mimeType": .string("application/json"),
       ]),
     ])])

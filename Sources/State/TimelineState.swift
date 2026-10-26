@@ -5,29 +5,44 @@ import Observation
 /// and hidden command types. Port of `contexts/Timeline/useTimeline.ts`'s reducer
 /// state (the `TimelineContext` fields the Timeline page reads/writes).
 ///
-/// Only `hiddenCommands` persists (to `UserDefaults`, mirroring the source's
-/// localStorage key `ReactotronTimelineHiddenCommands`), per this task's brief.
-/// `isSearchOpen`/`search`/`isReversed` reset on each launch, same as the
-/// source's in-memory `useReducer` state for those three fields (the source only
-/// loads `isReversed` and `hiddenCommands` from `localStorage` on mount — see
-/// `useTimeline.ts`'s effect — but the brief scopes persistence to
-/// `hiddenCommands` only, so `isReversed` is intentionally left in-memory here).
+/// `isReversed` and `hiddenCommands` persist to `UserDefaults`, mirroring the
+/// source's two `localStorage` keys (`StorageKey.ReversedOrder` /
+/// `StorageKey.HiddenCommands`): both are loaded in `init` (the source's
+/// mount-only `useEffect`, which reads but does not write), and each is written
+/// back whenever it changes (`toggleReverse` stores `"reversed"`/`"regular"`;
+/// `setHiddenCommands` stores the list). `isSearchOpen`/`search` reset on each
+/// launch, same as the source's in-memory `useReducer` state for those fields.
 @MainActor @Observable
 final class TimelineState {
   private static let hiddenCommandsKey = "hiddenCommands"
+  /// Same key and `"reversed"`/`"regular"` values as `useTimeline.ts`'s
+  /// `StorageKey.ReversedOrder`.
+  static let reversedOrderKey = "ReactotronTimelineReversedOrder"
+
+  @ObservationIgnored private let defaults: UserDefaults
 
   var isSearchOpen = false
   var search = ""
-  var isReversed = false
 
-  var hiddenCommands: Set<String> {
+  /// Port of `toggleReverse`'s `localStorage.setItem(StorageKey.ReversedOrder,
+  /// isReversed ? "reversed" : "regular")`.
+  var isReversed: Bool {
     didSet {
-      UserDefaults.standard.set(Array(hiddenCommands), forKey: Self.hiddenCommandsKey)
+      defaults.set(isReversed ? "reversed" : "regular", forKey: Self.reversedOrderKey)
     }
   }
 
-  init() {
-    let stored = UserDefaults.standard.stringArray(forKey: Self.hiddenCommandsKey) ?? []
+  var hiddenCommands: Set<String> {
+    didSet {
+      defaults.set(Array(hiddenCommands), forKey: Self.hiddenCommandsKey)
+    }
+  }
+
+  init(defaults: UserDefaults = .standard) {
+    self.defaults = defaults
+    // `useTimeline.ts` mount effect: anything other than "reversed" ⇒ regular.
+    isReversed = defaults.string(forKey: Self.reversedOrderKey) == "reversed"
+    let stored = defaults.stringArray(forKey: Self.hiddenCommandsKey) ?? []
     hiddenCommands = Set(stored)
   }
 }
@@ -83,6 +98,19 @@ private func buildTimelineSearchRegex(_ search: String) -> NSRegularExpression? 
   return try? NSRegularExpression(pattern: escaped, options: [.caseInsensitive])
 }
 
+/// Stand-in for `JSON.stringify` in `filterSearch`'s `matching`. Unlike the
+/// shared `JSONValue.encodedString()` (plain `JSONEncoder`, used on the wire),
+/// this leaves `/` unescaped, so a search like `/users` still hits an
+/// object-valued `payload.message` such as `{"path":"/users/1"}`.
+/// Residual: `JSONValue.object` is an unordered dictionary, so key order can
+/// differ from `JSON.stringify`'s insertion order — only a search spanning two
+/// adjacent keys could ever match differently.
+private let timelineSearchEncoder: JSONEncoder = {
+  let encoder = JSONEncoder()
+  encoder.outputFormatting = [.withoutEscapingSlashes]
+  return encoder
+}()
+
 /// Port of the inline `matching(value)` closure in `filterSearch`: falsy values
 /// (JS truthiness — `JSONValue.isTruthy` mirrors this exactly) never match;
 /// strings are tested directly; anything else is JSON-serialized first.
@@ -93,7 +121,9 @@ private func timelineSearchMatches(_ value: JSONValue?, regex: NSRegularExpressi
   if case .string(let s) = value {
     text = s
   } else {
-    guard let stringified = value.encodedString() else { return false }
+    guard let data = try? timelineSearchEncoder.encode(value),
+      let stringified = String(data: data, encoding: .utf8)
+    else { return false }
     text = stringified
   }
 

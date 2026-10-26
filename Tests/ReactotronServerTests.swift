@@ -13,15 +13,23 @@ final class RawWSClient: @unchecked Sendable {
     let ws = NWProtocolWebSocket.Options()
     ws.autoReplyPing = true
     params.defaultProtocolStack.applicationProtocols.insert(ws, at: 0)
-    conn = NWConnection(host: "127.0.0.1", port: NWEndpoint.Port(rawValue: port)!, using: params)
+    // A `.url` endpoint, not host/port: the client WebSocket stack needs the
+    // URL to build its HTTP upgrade request, and with a bare host/port endpoint
+    // the connection never reaches `.ready`.
+    conn = NWConnection(to: .url(URL(string: "ws://127.0.0.1:\(port)")!), using: params)
   }
 
+  /// Resumes on `.ready`, or on `.failed`/`.waiting`/`.cancelled` so a broken
+  /// handshake fails the test via its expectation timeout instead of hanging.
   func connect() async {
     await withCheckedContinuation { cont in
       conn.stateUpdateHandler = { [weak conn] state in
-        if case .ready = state {
+        switch state {
+        case .ready, .failed, .waiting, .cancelled:
           conn?.stateUpdateHandler = nil  // resume exactly once
           cont.resume()
+        default:
+          break
         }
       }
       conn.start(queue: .global())

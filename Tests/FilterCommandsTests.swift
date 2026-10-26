@@ -146,4 +146,93 @@ final class FilterCommandsTests: XCTestCase {
 
     XCTAssertEqual(result, [])
   }
+
+  // MARK: - Upstream TESTS table (filterCommands.test.ts)
+  //
+  // Port of `TEST_COMMANDS` + `TESTS`; each command's messageId is its index in
+  // the source fixture, so expected results are listed as indices.
+
+  private static let requestDataString =
+    #"{"operationName":"SEARCHDATA","variables":{"testing":{"nested":"thing"}},"query":"query LaunchList {\n  launches {\n    id\n }\n}\n"}"#
+
+  private var upstreamFixture: [Command] {
+    let fixture: [(String, JSONValue)] = [
+      ("SEARCHTYPE", .object([:])),
+      ("ADUMMYOBJ", .object(["message": .string("SEARCHMESSAGE")])),
+      ("ADUMMYOBJ", .object(["preview": .string("SEARCHPREVIEW")])),
+      ("ADUMMYOBJ", .object(["name": .string("SEARCHNAME")])),
+      ("ADUMMYOBJ", .object(["path": .string("SEARCHPATH")])),
+      ("ADUMMYOBJ", .object(["triggerType": .string("SEARCHTRIGGERTYPE")])),
+      ("ADUMMYOBJ", .object(["description": .string("SEARCHDESCRIPTION")])),
+      ("ADUMMYOBJ", .object(["request": .object(["url": .string("SEARCHURL")])])),
+      ("REGEX", .object(["message": .string("[1234] Log text")])),
+      ("REGEX", .object(["message": .string("123 Log text")])),
+      ("REGEX", .object(["message": .string("Log text (123)")])),
+      ("log", .object(["debug": .string("LOGDEBUG")])),
+      ("client.intro", .object(["connection": .string("SEARCHCONNECTION")])),
+      ("ADUMMYOBJ", .object(["request": .object(["data": .string(Self.requestDataString)])])),
+    ]
+    return fixture.enumerated().map { makeCommand(type: $1.0, messageId: $0, payload: $1.1) }
+  }
+
+  private static let upstreamTests: [(name: String, search: String, result: [Int])] = [
+    ("type", "SEARCHTYPE", [0]),
+    ("payload.message", "SEARCHMESSAGE", [1]),
+    ("payload.preview", "SEARCHPREVIEW", [2]),
+    ("payload.name", "SEARCHNAME", [3]),
+    ("payload.path", "SEARCHPATH", [4]),
+    ("payload.triggerType", "SEARCHTRIGGERTYPE", [5]),
+    ("payload.description", "SEARCHDESCRIPTION", [6]),
+    ("payload.request.url", "SEARCHURL", [7]),
+    ("payload.request.data", "SEARCHDATA", [13]),
+    ("log => debug", "debug", [11]),
+    ("log => warning", "warning", [11]),
+    ("log => error", "error", [11]),
+    ("clientIntro => connection", "connection", [12]),
+    ("multiple results", "ADUMMYOBJ", [1, 2, 3, 4, 5, 6, 7, 13]),
+    ("deep search results", "SEARCH", [0, 1, 2, 3, 4, 5, 6, 7, 13]),
+    ("deep search results - even deeper", "ME", [1, 3, 13]),
+    ("deep search results - case insensitive", "me", [1, 3, 13]),
+    ("deep search results - type case insensitive", "myobj", [1, 2, 3, 4, 5, 6, 7, 13]),
+    ("search that results in a invalid regex", "[123", [8]),
+    ("another search that results in a invalid regex", "123)", [10]),
+  ]
+
+  func testUpstreamTableFilterSearch() {
+    let commands = upstreamFixture
+    for test in Self.upstreamTests {
+      XCTAssertEqual(
+        filterSearch(commands, search: test.search).map(\.messageId), test.result, test.name
+      )
+    }
+  }
+
+  func testUpstreamTableFilterCommands() {
+    let commands = upstreamFixture
+    for test in Self.upstreamTests {
+      XCTAssertEqual(
+        filterCommands(commands, search: test.search, hidden: []).map(\.messageId), test.result,
+        test.name
+      )
+    }
+  }
+
+  func testUpstreamFilterHiddenDropsOnlyListedTypes() {
+    let commands = upstreamFixture
+    let expected = commands.filter { $0.type != "client.intro" }.map(\.messageId)
+    XCTAssertEqual(filterHidden(commands, hidden: ["client.intro"]).map(\.messageId), expected)
+    XCTAssertEqual(
+      filterCommands(commands, search: "", hidden: ["client.intro"]).map(\.messageId), expected
+    )
+  }
+
+  /// `JSON.stringify` leaves `/` unescaped, so a slash search must hit an
+  /// object-valued `payload.message`.
+  func testSlashSearchMatchesObjectValuedMessage() {
+    let command = makeCommand(
+      type: "log", messageId: 1,
+      payload: .object(["message": .object(["path": .string("/users/1")])])
+    )
+    XCTAssertEqual(filterSearch([command], search: "/users").map(\.messageId), [1])
+  }
 }
