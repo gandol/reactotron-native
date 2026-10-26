@@ -37,11 +37,21 @@ struct TreeView: View {
   let value: JSONValue
   let level: Int
 
-  @State private var expanded: Set<String> = []
+  @State private var expanded: Set<String>
 
   init(value: JSONValue, level: Int = 0) {
     self.value = value
     self.level = level
+    // Auto-expand the root node initially, matching reactotron-core-ui's
+    // TreeView (`shouldExpandNodeInitially` with the default level), so the
+    // top-level keys are visible without a click. Nested nodes stay collapsed.
+    let expandsRoot: Bool
+    switch value {
+    case .object(let d): expandsRoot = !d.isEmpty
+    case .array(let a): expandsRoot = !a.isEmpty
+    default: expandsRoot = false
+    }
+    _expanded = State(initialValue: expandsRoot ? ["root"] : [])
   }
 
   var body: some View {
@@ -49,6 +59,7 @@ struct TreeView: View {
       value: value,
       level: level,
       path: "root",
+      keyLabel: nil,
       expanded: $expanded
     )
   }
@@ -56,10 +67,17 @@ struct TreeView: View {
 
 // MARK: - _TreeNode (private recursive node)
 
+/// A single tree node. Renders one row — `[disclosure] [key :] value/summary` —
+/// and, when an expandable node is open, its children stacked BELOW it and
+/// indented one level. The key (or `[index]`) belongs to this node's own row,
+/// not to a horizontal wrapper around it, so nested containers grow downward
+/// (like reactotron-core-ui's TreeView) instead of marching off to the right.
 private struct _TreeNode: View {
   let value: JSONValue
   let level: Int
   let path: String
+  /// The object key or `[index]` this node sits under, or nil at the root.
+  let keyLabel: String?
   @Binding var expanded: Set<String>
 
   private var isExpandable: Bool {
@@ -73,8 +91,10 @@ private struct _TreeNode: View {
     expanded.contains(path)
   }
 
+  @State private var isCopyHovering = false
+
   var body: some View {
-    VStack(alignment: .leading, spacing: 0) {
+    VStack(alignment: .leading, spacing: 2) {
       row
       if isExpandable && isExpanded {
         children
@@ -84,23 +104,61 @@ private struct _TreeNode: View {
 
   // MARK: Row
 
+  @ViewBuilder
   private var row: some View {
-    Button {
-      withAnimation(.easeInOut(duration: 0.15)) {
-        if isExpanded {
-          expanded.remove(path)
-        } else {
-          expanded.insert(path)
-        }
-      }
-    } label: {
-      HStack(spacing: 4) {
+    // The disclosure/label part toggles expansion via a tap gesture (NOT a
+    // Button), so the sibling Copy button — which IS a Button — actually
+    // receives its taps. A Button nested inside a Button never fires in
+    // SwiftUI (the outer one swallows the tap), which is why an earlier
+    // version's Copy button did nothing.
+    HStack(alignment: .firstTextBaseline, spacing: 4) {
+      HStack(alignment: .firstTextBaseline, spacing: 4) {
         disclosureIndicator
+        if let keyLabel {
+          Text(keyLabel)
+            .font(Theme.font())
+            .foregroundStyle(Theme.tag)
+            .lineLimit(1)
+          Text(":")
+            .font(Theme.font())
+            .foregroundStyle(Theme.foregroundDark)
+        }
         rowContent
       }
-      .padding(.leading, CGFloat(level) * 15)
+      .contentShape(Rectangle())
+      .onTapGesture {
+        guard isExpandable else { return }
+        withAnimation(.easeInOut(duration: 0.15)) {
+          if isExpanded { expanded.remove(path) } else { expanded.insert(path) }
+        }
+      }
+
+      // Copy button on expandable (object/array) nodes — port of
+      // reactotron-core-ui TreeView's per-node `ButtonCopy`. Always visible
+      // (source only dims it slightly on hover), copies the node's pretty JSON.
+      if isExpandable {
+        copyButton
+      }
+    }
+    .padding(.leading, CGFloat(level) * 14)
+  }
+
+  private var copyButton: some View {
+    Button {
+      copyToClipboard(prettyJSON(value))
+    } label: {
+      Text("Copy")
+        .font(Theme.font(10))
+        .padding(.horizontal, 6)
+        .padding(.vertical, 1)
+        .background(RoundedRectangle(cornerRadius: 3).fill(Theme.highlight))
+        .foregroundStyle(Theme.background)
+        .opacity(isCopyHovering ? 0.85 : 1)
+        .contentShape(Rectangle())
     }
     .buttonStyle(.plain)
+    .onHover { isCopyHovering = $0 }
+    .help("Copy to clipboard")
   }
 
   @ViewBuilder
@@ -120,13 +178,13 @@ private struct _TreeNode: View {
     switch value {
     case .object(let dict):
       if isExpanded {
-        label("{ \(dict.count) keys }", color: Theme.tag)
+        label("{ \(dict.count) keys }", color: Theme.foregroundDark)
       } else {
         label(treePreview(value), color: Theme.foregroundDark)
       }
     case .array(let items):
       if isExpanded {
-        label("[ \(items.count) items ]", color: Theme.tag)
+        label("[ \(items.count) items ]", color: Theme.foregroundDark)
       } else {
         label(treePreview(value), color: Theme.foregroundDark)
       }
@@ -150,52 +208,36 @@ private struct _TreeNode: View {
       .font(Theme.font())
       .foregroundStyle(color)
       .lineLimit(1)
+      .textSelection(.enabled)
   }
 
-  // MARK: Children
+  // MARK: Children (stacked below, indented one level)
 
   @ViewBuilder
   private var children: some View {
     switch value {
     case .object(let dict):
-      ForEach(Array(dict.keys.sorted().enumerated()), id: \.offset) { _, key in
+      let keys = dict.keys.sorted()
+      ForEach(keys, id: \.self) { key in
         if let child = dict[key] {
-          HStack(spacing: 4) {
-            Text(key)
-              .font(Theme.font())
-              .foregroundStyle(Theme.tag)
-              .lineLimit(1)
-            Text(":")
-              .font(Theme.font())
-              .foregroundStyle(Theme.foregroundDark)
-            _TreeNode(
-              value: child,
-              level: level + 1,
-              path: "\(path).\(key)",
-              expanded: $expanded
-            )
-          }
-          .padding(.leading, CGFloat(level) * 15)
+          _TreeNode(
+            value: child,
+            level: level + 1,
+            path: "\(path).\(key)",
+            keyLabel: key,
+            expanded: $expanded
+          )
         }
       }
     case .array(let items):
       ForEach(Array(items.enumerated()), id: \.offset) { index, child in
-        HStack(spacing: 4) {
-          Text("[\(index)]")
-            .font(Theme.font())
-            .foregroundStyle(Theme.tag)
-            .lineLimit(1)
-          Text(":")
-            .font(Theme.font())
-            .foregroundStyle(Theme.foregroundDark)
-          _TreeNode(
-            value: child,
-            level: level + 1,
-            path: "\(path)[\(index)]",
-            expanded: $expanded
-          )
-        }
-        .padding(.leading, CGFloat(level) * 15)
+        _TreeNode(
+          value: child,
+          level: level + 1,
+          path: "\(path)[\(index)]",
+          keyLabel: "[\(index)]",
+          expanded: $expanded
+        )
       }
     default:
       EmptyView()

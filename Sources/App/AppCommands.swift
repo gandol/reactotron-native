@@ -181,7 +181,7 @@ struct AppCommands: Commands {
         model.activeModal = .subscriptionAdd
       }
       commandButton(AppKeybinds.openDispatchModal, label: "Open Dispatch Modal") {
-        model.activeModal = .dispatchAction
+        model.activeModal = .dispatchAction(seed: nil)
       }
       commandButton(AppKeybinds.takeSnapshot, label: "Take Snapshot") {
         model.sendCommand(type: "state.backup.request", payload: .object([:]))

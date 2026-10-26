@@ -7,15 +7,10 @@ private enum ApiTab: Equatable {
   case responseBody, responseHeaders, requestBody, requestParams, requestHeaders
 }
 
-/// Port of `ApiResponseCommand/index.tsx`.
-///
-/// Scope note: source's toolbar has 4 buttons (copy response, copy request,
-/// copy-as-markdown via `apiToMarkdown`, copy-as-cURL via
-/// `apiRequestToCurl`). This ports the "copy response" button — the other 3
-/// depend on porting two more nontrivial formatting utilities
-/// (`utils/api-to-markdown`, `utils/api-to-curl`) not otherwise used
-/// anywhere else in this task; deferred as a documented scope cut rather
-/// than ported for completeness's sake.
+/// Port of `ApiResponseCommand/index.tsx`, including the full 4-button copy
+/// toolbar from `buildToolbar`: Copy JSON response, Copy JSON request (only
+/// when the request carries a body), Copy as markdown (`apiToMarkdown`), and
+/// Copy as cURL (`apiRequestToCurl`).
 struct ApiResponseCommandView: View {
   let command: Command
   @State private var activeTab: ApiTab?
@@ -36,11 +31,7 @@ struct ApiResponseCommandView: View {
       preview: model.preview,
       important: command.important,
       responseStatusCode: statusCode,
-      toolbar: [
-        TimelineToolbarAction(icon: .mdContentCopy, tip: "Copy JSON response to clipboard") {
-          copyToClipboard(prettyJSON(response?["body"] ?? .null))
-        }
-      ]
+      toolbar: apiToolbar(payload: payload, request: request, response: response, hasRequestBody: hasRequestBody)
     ) {
       VStack(alignment: .leading, spacing: 10) {
         Text(request?["url"]?.stringValue ?? "")
@@ -67,6 +58,44 @@ struct ApiResponseCommandView: View {
     }
   }
 
+  /// Port of `buildToolbar` — the 4 copy actions, in source order, with the
+  /// request-copy button present only when the request carries a body.
+  private func apiToolbar(payload: JSONValue, request: JSONValue?, response: JSONValue?, hasRequestBody: Bool) -> [TimelineToolbarAction] {
+    var items: [TimelineToolbarAction] = []
+
+    // Copy JSON response
+    items.append(TimelineToolbarAction(icon: .mdCallReceived, tip: "Copy JSON response to clipboard") {
+      copyToClipboard(prettyJSON(response?["body"] ?? .null))
+    })
+
+    // Copy JSON request (only when request has a body)
+    if hasRequestBody {
+      items.append(TimelineToolbarAction(icon: .mdCallMade, tip: "Copy JSON request to clipboard") {
+        let data = request?["data"] ?? .null
+        // If it's a JSON string, re-pretty-print it; else copy raw.
+        if let s = data.stringValue, let reparsed = JSONValue.parse(Data(s.utf8)) {
+          copyToClipboard(prettyJSON(reparsed))
+        } else if let s = data.stringValue {
+          copyToClipboard(s)
+        } else {
+          copyToClipboard(prettyJSON(data))
+        }
+      })
+    }
+
+    // Copy as markdown
+    items.append(TimelineToolbarAction(icon: .mdReceipt, tip: "Copy as markdown to clipboard") {
+      copyToClipboard(apiToMarkdown(payload))
+    })
+
+    // Copy as cURL
+    items.append(TimelineToolbarAction(icon: .mdContentCopy, tip: "Copy JSON request as cURL") {
+      copyToClipboard(apiRequestToCurl(payload))
+    })
+
+    return items
+  }
+
   @ViewBuilder
   private func tabContent(request: JSONValue?, response: JSONValue?) -> some View {
     switch activeTab {
@@ -81,11 +110,10 @@ struct ApiResponseCommandView: View {
 
   @ViewBuilder
   private func apiValueView(_ value: JSONValue?) -> some View {
-    if let value, !value.isNull {
-      TreeView(value: jsonAwareValue(value))
-    } else {
-      Text("null").font(Theme.font(12)).foregroundStyle(Theme.tag)
-    }
+    // ContentValueView matches the real app: shallow objects (like HTTP
+    // headers) become a two-column table, nested data becomes a tree, strings
+    // become selectable text.
+    ContentValueView(value: value ?? .null)
   }
 
   private func tabButton(_ text: String, _ tab: ApiTab) -> some View {

@@ -79,22 +79,36 @@ struct BaseCommandView<Content: View>: View {
   }
 
   private var topBar: some View {
+    // Only the non-interactive region toggles open/closed. The toolbar buttons
+    // are siblings of that tappable region (not inside it), so tapping a
+    // toolbar action never also toggles the row — the SwiftUI equivalent of the
+    // source's `event.stopPropagation()` on each toolbar button.
     HStack(alignment: .top, spacing: 0) {
-      Timestamp(date: date)
-        .padding(.trailing, 10)
-        .padding(.top, 4)
-
-      titleTag
-        .frame(width: 168, alignment: .leading)
-
-      if !isOpen {
-        Text(preview)
-          .font(Theme.font())
-          .foregroundStyle(Theme.highlight)
-          .lineLimit(1)
-          .truncationMode(.tail)
+      HStack(alignment: .top, spacing: 0) {
+        Timestamp(date: date)
+          .padding(.trailing, 10)
           .padding(.top, 4)
-          .frame(maxWidth: .infinity, alignment: .leading)
+
+        titleTag
+          .frame(width: 168, alignment: .leading)
+
+        if !isOpen {
+          Text(preview)
+            .font(Theme.font())
+            .foregroundStyle(Theme.highlight)
+            .lineLimit(1)
+            .truncationMode(.tail)
+            .padding(.top, 4)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+
+        if isOpen {
+          Spacer(minLength: 0)
+        }
+      }
+      .contentShape(Rectangle())
+      .onTapGesture {
+        withAnimation(.easeInOut(duration: 0.15)) { isOpen.toggle() }
       }
 
       if isOpen, !toolbar.isEmpty {
@@ -104,27 +118,30 @@ struct BaseCommandView<Content: View>: View {
               item.action()
             } label: {
               Icon(item.icon, size: 18, color: Theme.foreground)
-                .padding(4)
+                .padding(6)
+                // An Icon is a filled Path: without an explicit hit area only
+                // the inked pixels are tappable, so clicks between the glyph's
+                // strokes fall through and the button appears dead.
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .help(item.tip)
           }
         }
-      }
-
-      if isOpen {
-        Spacer(minLength: 0)
+        .padding(.leading, 4)
       }
 
       Icon(isOpen ? .mdExpandLess : .mdExpandMore, size: 20, color: Theme.backgroundHighlight)
         .padding(.top, 2)
+        .padding(.leading, 6)
+        // Same filled-Path hit-testing caveat as the toolbar buttons above.
+        .contentShape(Rectangle())
+        .onTapGesture {
+          withAnimation(.easeInOut(duration: 0.15)) { isOpen.toggle() }
+        }
     }
     .padding(.horizontal, 20)
     .padding(.vertical, 15)
-    .contentShape(Rectangle())
-    .onTapGesture {
-      withAnimation(.easeInOut(duration: 0.15)) { isOpen.toggle() }
-    }
   }
 
   private var titleTag: some View {

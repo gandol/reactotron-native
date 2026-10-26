@@ -30,6 +30,11 @@ final class ReactotronServer: @unchecked Sendable {
   private var listener: NWListener?
   private var keepAliveTimer: DispatchSourceTimer?
 
+  /// Keepalive ping interval in seconds. 30 in production (matches
+  /// reactotron-core-server.ts); overridable so tests can force a ping
+  /// quickly and assert the connection survives the client's pong reply.
+  var keepAliveInterval: TimeInterval = 30
+
   // MARK: - Connection state (queue-confined)
 
   private var connectionId = 0
@@ -166,14 +171,31 @@ final class ReactotronServer: @unchecked Sendable {
   // MARK: - Receive
 
   private func receiveLoop(_ conn: NWConnection, id: Int) {
-    conn.receiveMessage { [weak self] data, _, _, error in
+    conn.receiveMessage { [weak self] data, context, _, error in
       guard let self else { return }
-      if let data, error == nil {
-        self.handleMessage(data: data, connectionId: id)
-        self.receiveLoop(conn, id: id)
-      } else {
+
+      // A real transport error tears the connection down.
+      if error != nil {
         conn.cancel()
+        return
       }
+
+      // Only a WebSocket close frame is an intentional disconnect. Control
+      // frames (ping/pong) and empty payloads arrive here with data == nil —
+      // treating that as a disconnect would tear down a healthy connection
+      // every time the client auto-replies to our keepalive ping with a pong.
+      let opcode = (context?.protocolMetadata(definition: NWProtocolWebSocket.definition)
+        as? NWProtocolWebSocket.Metadata)?.opcode
+      if opcode == .close {
+        conn.cancel()
+        return
+      }
+
+      // Text/binary data → process it; anything else (ping/pong/empty) is ignored.
+      if let data, !data.isEmpty {
+        self.handleMessage(data: data, connectionId: id)
+      }
+      self.receiveLoop(conn, id: id)
     }
   }
 
@@ -341,7 +363,7 @@ final class ReactotronServer: @unchecked Sendable {
   private func startKeepAlive() {
     keepAliveTimer?.cancel()
     let timer = DispatchSource.makeTimerSource(queue: queue)
-    timer.schedule(deadline: .now() + 30, repeating: 30)
+    timer.schedule(deadline: .now() + keepAliveInterval, repeating: keepAliveInterval)
     timer.setEventHandler { [weak self] in
       guard let self else { return }
       let meta = NWProtocolWebSocket.Metadata(opcode: .ping)

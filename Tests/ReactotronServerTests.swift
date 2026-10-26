@@ -1,5 +1,43 @@
 import XCTest
+import Network
 @testable import Reactotron
+
+/// Raw NWConnection WebSocket client for tests that need to emit control frames
+/// (e.g. a `.pong`) that URLSessionWebSocketTask hides. Used to reproduce the
+/// keepalive-pong drop bug faithfully.
+final class RawWSClient: @unchecked Sendable {
+  private let conn: NWConnection
+
+  init(port: UInt16) {
+    let params = NWParameters.tcp
+    let ws = NWProtocolWebSocket.Options()
+    ws.autoReplyPing = true
+    params.defaultProtocolStack.applicationProtocols.insert(ws, at: 0)
+    conn = NWConnection(host: "127.0.0.1", port: NWEndpoint.Port(rawValue: port)!, using: params)
+  }
+
+  func connect() async {
+    await withCheckedContinuation { cont in
+      conn.stateUpdateHandler = { [weak conn] state in
+        if case .ready = state {
+          conn?.stateUpdateHandler = nil  // resume exactly once
+          cont.resume()
+        }
+      }
+      conn.start(queue: .global())
+    }
+  }
+
+  private func send(_ data: Data, opcode: NWProtocolWebSocket.Opcode) {
+    let meta = NWProtocolWebSocket.Metadata(opcode: opcode)
+    let ctx = NWConnection.ContentContext(identifier: "send", metadata: [meta])
+    conn.send(content: data, contentContext: ctx, isComplete: true, completion: .idempotent)
+  }
+
+  func sendText(_ text: String) { send(Data(text.utf8), opcode: .text) }
+  func sendPong() { send(Data(), opcode: .pong) }
+  func close() { conn.cancel() }
+}
 
 /// Test helper: connect, optionally intro, collect received messages.
 final class TestClient {
@@ -142,6 +180,34 @@ final class ReactotronServerTests: XCTestCase {
     try await client.send(#"{"type":"client.intro","payload":{"clientId":"cc"}}"#)
     try await client.send(#"{"type":"customCommand.register","payload":{"id":1,"command":"go_home","title":"Go Home"}}"#)
     await fulfillment(of: [registered], timeout: 5)
+    client.close()
+  }
+
+  /// Regression: a client's pong (its automatic reply to the server's keepalive
+  /// ping) must NOT tear down the connection. A pong arrives at the server's
+  /// receive loop as a control frame with data == nil; an earlier bug treated
+  /// that as a disconnect and cancelled the socket, dropping every connected
+  /// client roughly once per keepalive interval.
+  ///
+  /// URLSessionWebSocketTask never surfaces this path, so this uses a raw
+  /// NWConnection client that sends an explicit `.pong` frame — exactly what a
+  /// browser / React Native client emits in response to the server's ping.
+  func testPongFrameDoesNotDropConnection() async throws {
+    await start()
+    let logReceived = expectation(description: "log received after a pong frame")
+    server.events.command = { cmd in
+      if cmd.type == "log" { logReceived.fulfill() }
+    }
+
+    let client = RawWSClient(port: port)
+    await client.connect()
+    client.sendText(#"{"type":"client.intro","payload":{"clientId":"pong-test"}}"#)
+    // Emulate the client's automatic pong reply to the server's keepalive ping.
+    client.sendPong()
+    // If the pong dropped the connection, this log never reaches the server.
+    client.sendText(#"{"type":"log","payload":{"level":"debug","message":"alive after pong"}}"#)
+
+    await fulfillment(of: [logReceived], timeout: 5)
     client.close()
   }
 

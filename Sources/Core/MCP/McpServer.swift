@@ -29,7 +29,10 @@ final class McpServer {
     !rules.sensitiveKeys.isEmpty || !rules.valuePatterns.isEmpty || !rules.statePathPatterns.isEmpty
   }
 
-  private let core = McpCore()
+  /// The lock-guarded, `Sendable` core. Exposed `nonisolated` so the server
+  /// queue can buffer commands into it directly, without hopping to the main
+  /// actor and contending with MCP request handlers for its lock.
+  nonisolated let core = McpCore()
   private var http: MinimalHTTPServer?
 
   init(rules: Redaction.Rules = .defaults) {

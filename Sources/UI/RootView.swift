@@ -55,8 +55,9 @@ struct RootView: View {
       McpSettingsModal(onClose: { model.activeModal = nil })
     case .timelineFilter:
       TimelineFilterModal(onClose: { model.activeModal = nil })
-    case .dispatchAction:
+    case .dispatchAction(let seed):
       DispatchActionModal(
+        seedText: seed,
         onClose: { model.activeModal = nil },
         onDispatch: { action in
           model.sendCommand(type: "state.action.dispatch", payload: .object(["action": action]))

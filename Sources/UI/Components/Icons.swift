@@ -353,6 +353,9 @@ enum IconName: CaseIterable {
   case faQuestion
   // Added in Task 10 for TimelineCommands (BaseCommandView chrome + toolbar actions).
   case mdContentCopy
+  case mdCallMade
+  case mdReceipt
+  case mdCode
   case mdRepeat
   case mdList
   case mdExpandLess
@@ -490,6 +493,18 @@ enum IconName: CaseIterable {
     .mdContentCopy: SVGIcon(
       width: 24, height: 24,
       path: "M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"
+    ),
+    .mdCallMade: SVGIcon(
+      width: 24, height: 24,
+      path: "M9 5v2h6.59L4 18.59 5.41 20 17 8.41V15h2V5z"
+    ),
+    .mdReceipt: SVGIcon(
+      width: 24, height: 24,
+      path: "M18 17H6v-2h12v2zm0-4H6v-2h12v2zm0-4H6V7h12v2zM3 22l1.5-1.5L6 22l1.5-1.5L9 22l1.5-1.5L12 22l1.5-1.5L15 22l1.5-1.5L18 22l1.5-1.5L21 22V2l-1.5 1.5L18 2l-1.5 1.5L15 2l-1.5 1.5L12 2l-1.5 1.5L9 2 7.5 3.5 6 2 4.5 3.5 3 2v20z"
+    ),
+    .mdCode: SVGIcon(
+      width: 24, height: 24,
+      path: "M9.4 16.6 4.8 12l4.6-4.6L8 6l-6 6 6 6 1.4-1.4zm5.2 0 4.6-4.6-4.6-4.6L16 6l6 6-6 6-1.4-1.4z"
     ),
     .mdRepeat: SVGIcon(
       width: 24, height: 24,

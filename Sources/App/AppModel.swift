@@ -9,7 +9,10 @@ enum Page: String, CaseIterable {
 
 /// Modal presented over `RootView` via `.sheet(item:)`.
 enum Modal: Identifiable {
-  case dispatchAction
+  /// Optional seed text pre-fills the JSON editor — used by the timeline's
+  /// per-action "Edit and dispatch this action" toolbar button (source's
+  /// `openDispatchDialog`). nil opens the empty-seed dialog (⌘D).
+  case dispatchAction(seed: String? = nil)
   case timelineFilter
   case snapshotRename(SnapshotItem)
   case subscriptionAdd
@@ -93,10 +96,15 @@ final class AppModel {
       Task { @MainActor in self?.session.connectionDisconnected(conn) }
     }
     server.events.command = { [weak self] cmd in
+      // Buffer into MCP on the server queue, NOT the main actor: the buffer is
+      // guarded by a lock that MCP request handlers hold while snapshotting and
+      // redacting up to 500 commands. Hopping this to @MainActor made the UI
+      // contend with those handlers for that lock, freezing the app whenever an
+      // MCP client read the timeline while traffic was flowing.
+      self?.mcp.core.buffer(cmd)
       Task { @MainActor in
         self?.session.commandReceived(cmd)
         self?.stateUI.handle(command: cmd)
-        self?.mcp.buffer(cmd)
       }
     }
   }

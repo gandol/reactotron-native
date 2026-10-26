@@ -29,7 +29,7 @@ struct KeyValueTable: View {
     HStack(alignment: .top, spacing: 10) {
       Text(key)
         .foregroundStyle(Theme.foregroundDark)
-        .frame(width: 150, alignment: .leading)
+        .frame(width: 210, alignment: .leading)
       Text(textForValue(value))
         .foregroundStyle(colorForValue(value))
         .frame(maxWidth: .infinity, alignment: .leading)

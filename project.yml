@@ -22,13 +22,18 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.reactotron.native
+        # Bundle filename → "Reactotron Native.app" so it never collides with
+        # the official Electron "Reactotron.app" in /Applications (they also
+        # differ by bundle id: com.reactotron.native vs com.reactotron). The
+        # Xcode target and scheme stay named "Reactotron", so build commands
+        # are unaffected.
+        PRODUCT_NAME: "Reactotron Native"
+        # Keep the Swift MODULE name "Reactotron" (no space) so `@testable
+        # import Reactotron` in the tests still resolves — otherwise PRODUCT_NAME
+        # would derive a "Reactotron_Native" module and break every test file.
+        PRODUCT_MODULE_NAME: Reactotron
         GENERATE_INFOPLIST_FILE: YES
-        # Display name shown in the Dock, Finder, and Cmd-Tab switcher. Kept
-        # separate from the target/binary name (Reactotron) so build/scheme
-        # commands, the test host, and DerivedData paths stay unchanged.
-        # (CFBundleName / the menu-bar title stays "Reactotron" because Xcode
-        # locks it to PRODUCT_NAME; changing that would rename the .app and
-        # break the ReactotronTests test host.)
+        # Full display name in the Dock, Finder, menu bar, and Cmd-Tab switcher.
         INFOPLIST_KEY_CFBundleDisplayName: "Reactotron macOS Native"
         # App icon (Dock/Finder/Cmd-Tab) from the AppIcon set in
         # Sources/Resources/Assets.xcassets, generated from the Reactotron logo.
@@ -49,6 +54,12 @@ targets:
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES
+        # XcodeGen derives TEST_HOST/BUNDLE_LOADER from the app TARGET name
+        # ("Reactotron"), but the app's PRODUCT_NAME is now "Reactotron Native",
+        # so the auto-derived paths point at a non-existent Reactotron.app.
+        # Point them at the real product explicitly.
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/Reactotron Native.app/Contents/MacOS/Reactotron Native"
+        BUNDLE_LOADER: "$(TEST_HOST)"
     dependencies:
       - target: Reactotron
 schemes:

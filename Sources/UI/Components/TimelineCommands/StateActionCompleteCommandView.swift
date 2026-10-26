@@ -14,11 +14,9 @@ import SwiftUI
 /// (out of scope for this task — flagged in the task report for a future
 /// fix at the parsing layer).
 ///
-/// Scope note: source's second toolbar button (`MdCode`, "Edit and dispatch
-/// this action") opens a dialog to hand-edit the action JSON before
-/// dispatching (`openDispatchDialog`). This ports the "Repeat this action"
-/// replay button only, per the brief's explicit toolbar requirement; the
-/// edit-and-dispatch dialog is a larger, separate modal-flow feature.
+/// Both source toolbar buttons are ported: "Repeat this action" (`MdRepeat`,
+/// re-dispatches immediately) and "Edit and dispatch this action" (`MdCode`,
+/// opens the Dispatch modal seeded with this action's JSON).
 struct StateActionCompleteCommandView: View {
   let command: Command
   @Environment(AppModel.self) private var model
@@ -38,7 +36,10 @@ struct StateActionCompleteCommandView: View {
       toolbar: [
         TimelineToolbarAction(icon: .mdRepeat, tip: "Repeat this action.") {
           replay(action: action)
-        }
+        },
+        TimelineToolbarAction(icon: .mdCode, tip: "Edit and dispatch this action.") {
+          model.activeModal = .dispatchAction(seed: prettyJSON(action ?? .null))
+        },
       ]
     ) {
       VStack(alignment: .leading, spacing: 10) {

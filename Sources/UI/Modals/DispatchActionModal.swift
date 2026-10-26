@@ -12,23 +12,25 @@ import SwiftUI
 /// handler) — unlike `SubscriptionAddModal`/`SnapshotRenameModal`, which leave
 /// closing to the caller.
 struct DispatchActionModal: View {
+  /// Non-nil when opened via the timeline's per-action "Edit and dispatch this
+  /// action" button — pre-fills the editor with that action's JSON. nil (⌘D)
+  /// starts from the empty skeleton below.
+  var seedText: String?
   let onClose: () -> Void
   let onDispatch: (JSONValue) -> Void
 
-  /// Seed text for the multiline editor. The source's global "Open Dispatch
-  /// Modal" keybind (`KeybindHandler.tsx`: `openDispatchModal("")`) actually
-  /// seeds an empty string, with a `placeholder` of
-  /// `{ type: 'RepoMessage.Request' }` shown only while empty; a *non-empty*
-  /// seed only occurs on the timeline's per-action "edit and dispatch"
-  /// shortcut, which restringifies that action's real payload. Task 12 wires
-  /// no such initial-value channel yet (`Modal.dispatchAction` carries no
-  /// payload — see `AppModel.Modal`), so per the task brief this starts from
-  /// a valid, editable JSON skeleton instead of blank.
-  private static let seedText = "{\n  \"type\": \"\"\n}"
+  private static let emptySeed = "{\n  \"type\": \"\"\n}"
 
-  @State private var text = Self.seedText
+  @State private var text: String
   @State private var errorMessage: String?
   @FocusState private var focused: Bool
+
+  init(seedText: String? = nil, onClose: @escaping () -> Void, onDispatch: @escaping (JSONValue) -> Void) {
+    self.seedText = seedText
+    self.onClose = onClose
+    self.onDispatch = onDispatch
+    _text = State(initialValue: seedText ?? Self.emptySeed)
+  }
 
   var body: some View {
     ModalChrome(title: "Dispatch Action", onClose: onClose) {
